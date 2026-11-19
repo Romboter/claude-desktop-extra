@@ -26,6 +26,7 @@ Check before committing: `git diff --diff-filter=M upstream/master...HEAD --stat
 |---|---|
 | `scripts/windows/build-windows.sh` | Download + verify the official Windows `.nupkg`, run the absorption probe on the Windows set, patch, repack, rewrite the asar integrity records in `claude.exe`, zip |
 | `scripts/windows/prepare-sources.sh`, `scripts/windows/upstream-overlay.patch` | The fork's edits to upstream files, applied at build time |
+| `scripts/windows/patch-check.py` | Quick "do the patches still fit?" loop: pulls Anthropic's Windows `.nupkg` (SHA1-checked), a `.deb`, or an extracted folder, builds the overlaid sources, applies the patch set and names the failures. Runs on Windows, Linux and macOS; packages nothing |
 | `scripts/windows/asar_integrity.py` | asar header hash, fuses, the exe integrity record (Windows enforces it; Linux does not) |
 | `patches/windows/add_windows_profiles.nim`, `js/windows_profiles_main.js` | `--profile=NAME` and sign-in callback routing, injected into `index.pre.js` |
 | `patches/windows/add_windows_update_notice.nim`, `js/windows_update_notice_main.js` | Once-per-version dialog when a newer `windows-v` release is out (the build has no updater), appended to `index.pre.js` |
