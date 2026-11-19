@@ -115,7 +115,7 @@ jobs:
           set -euo pipefail
           args=(--arch "$ARCH" --out dist)
           if [ -n "$WANT_VERSION" ]; then args+=(--version "$WANT_VERSION"); fi
-          scripts/windows/build-windows.sh "${args[@]}"
+          CDB_ORIGINAL_EXE_OUT="dist/original-claude-${ARCH}.exe" scripts/windows/build-windows.sh "${args[@]}"
           zip=$(ls dist/*.zip)
           v=$(basename "$zip" | sed -n 's/^claude-desktop-extra-\(.*\)-windows-.*\.zip$/\1/p')
           echo "version=$v" >> "$GITHUB_OUTPUT"
@@ -146,6 +146,17 @@ jobs:
         with:
           name: windows-${{ matrix.arch }}
           path: dist
+
+      - name: Check Anthropic's signature on the original claude.exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # The exe as Anthropic shipped it, before patching. Windows validates
+          # the chain and timestamp; the signer is pinned to Anthropic, PBC.
+          $sig = Get-AuthenticodeSignature 'dist\original-claude-${{ matrix.arch }}.exe'
+          Write-Host "Status: $($sig.Status); signer: $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') { throw "Anthropic's claude.exe signature is not valid: $($sig.Status)" }
+          if ($sig.SignerCertificate.Subject -notmatch '^CN="?Anthropic, PBC"?,') { throw "claude.exe is not signed by Anthropic, PBC: $($sig.SignerCertificate.Subject)" }
 
       - name: Install and boot a test profile
         shell: pwsh
@@ -204,6 +215,9 @@ jobs:
     if: ${{ inputs.publish }}
     needs: [build, smoke-test]
     runs-on: ubuntu-24.04
+    # Publishing waits for a reviewer: create the environment "windows-release"
+    # with required reviewers in Settings > Environments (see docs/windows.md).
+    environment: windows-release
     permissions:
       contents: write
     steps:

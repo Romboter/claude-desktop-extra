@@ -115,6 +115,12 @@ APP_TREE="$WORK/nupkg/lib/net45"
 RES="$APP_TREE/resources"
 [ -f "$APP_TREE/claude.exe" ] && [ -f "$RES/app.asar" ] || die "not a Claude Desktop package: claude.exe or resources/app.asar missing"
 cp "$RES/app.asar" "$WORK/original.asar"
+# CI keeps the pristine, Anthropic-signed exe so the Windows smoke test can
+# check its Authenticode signature (Linux cannot validate the chain).
+if [ -n "${CDB_ORIGINAL_EXE_OUT:-}" ]; then
+    mkdir -p "$(dirname "$CDB_ORIGINAL_EXE_OUT")"
+    cp "$APP_TREE/claude.exe" "$CDB_ORIGINAL_EXE_OUT"
+fi
 
 FUSES="$(python3 -I "$SCRIPT_DIR/asar_integrity.py" fuses "$APP_TREE/claude.exe")" || die "cannot read claude.exe's fuses"
 log "Fuses: $(tr '\n' ' ' <<< "$FUSES")"
@@ -129,6 +135,17 @@ mkdir -p "$WORK/app"
 # The Windows build's sources: this repo plus the overlay of upstream files.
 SRC="$WORK/src"
 "$SCRIPT_DIR/prepare-sources.sh" "$SRC"
+
+# The update notice must name THIS repository's releases, never the one the
+# sources were forked from. Stamp it from GITHUB_REPOSITORY (CI) or the origin
+# remote, and fail rather than ship another publisher's URL.
+REPO_SLUG="${GITHUB_REPOSITORY:-$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null | sed -E 's#^.*github\.com[:/]##; s#\.git$##')}"
+[[ "$REPO_SLUG" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] ||
+    die "cannot work out this repository (set GITHUB_REPOSITORY=owner/name): '$REPO_SLUG'"
+sed -i "s#^  var REPO = \"[^\"]*\";#  var REPO = \"$REPO_SLUG\";#" "$SRC/js/windows_update_notice_main.js"
+grep -qF "var REPO = \"$REPO_SLUG\";" "$SRC/js/windows_update_notice_main.js" ||
+    die "could not stamp the repository into windows_update_notice_main.js"
+log "Update notice follows releases of $REPO_SLUG"
 log "Compiling patches"
 make -C "$SRC/patches" -j"$(nproc)" >/dev/null
 

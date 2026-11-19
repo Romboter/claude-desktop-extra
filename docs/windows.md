@@ -135,3 +135,9 @@ This fork follows [patrickjaja/claude-desktop-extra](https://github.com/patrickj
   1. run `scripts/windows/prepare-sources.sh /tmp/src`;
   2. edit the files in `/tmp/src`;
   3. run `git -C /tmp/src diff > scripts/windows/upstream-overlay.patch`.
+
+## Release safeguards
+
+- **Approval before publishing:** the publish job uses the environment `windows-release`. Create it in Settings > Environments and add yourself as a required reviewer, otherwise the gate does nothing. Scheduled syncs then wait for your approval before a release goes out.
+- **Anthropic's signature:** CI keeps the original `claude.exe` and the Windows smoke test fails unless it has a valid Authenticode signature from Anthropic, PBC. Our patched exe is unsigned.
+- **Update notice:** the build stamps the update notice with the repository it runs in (`GITHUB_REPOSITORY`, or the origin remote), so a fork's users are pointed at the fork's releases.
