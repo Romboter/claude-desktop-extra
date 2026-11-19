@@ -98,10 +98,19 @@ jobs:
         run: |
           # Issues disabled or unreadable: no retry, the other triggers still apply.
           n=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "Automatic update failed"' --json number -q '.[0].number // empty' 2>/dev/null || true)
-          echo "issue=${n}" >> "$GITHUB_OUTPUT"
+          # Fork tweak: retry only if master moved since the last failed run,
+          # so an unfixed failure is not rebuilt every 6 hours.
           if [ -n "$n" ]; then
-            echo "Failure issue #${n} is open: retrying the build." >> "$GITHUB_STEP_SUMMARY"
+            head=$(gh api "repos/${GITHUB_REPOSITORY}/commits/master" -q .sha 2>/dev/null || true)
+            last=$(gh run list -R "$GITHUB_REPOSITORY" --workflow upstream-sync.yml --status failure --limit 1 --json headSha -q '.[0].headSha // empty' 2>/dev/null || true)
+            if [ -n "$head" ] && [ "$head" = "$last" ]; then
+              echo "Failure issue #${n} is open and master has not changed since the last failed run: not retrying." >> "$GITHUB_STEP_SUMMARY"
+              n=""
+            else
+              echo "Failure issue #${n} is open and master moved: retrying the build." >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
+          echo "issue=${n}" >> "$GITHUB_OUTPUT"
 
       - name: Decide
         id: decide
