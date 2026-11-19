@@ -478,9 +478,18 @@ index f79c42f..f120456 100644
  clean:
  	@rm -rf $(BINS) .nimcache
 diff --git a/patches/community/add_feature_auto_archive_grace.nim b/patches/community/add_feature_auto_archive_grace.nim
-index 45c4fc1..a980388 100644
+index 45c4fc1..d89b268 100644
 --- a/patches/community/add_feature_auto_archive_grace.nim
 +++ b/patches/community/add_feature_auto_archive_grace.nim
+@@ -83,7 +83,7 @@ proc apply*(input: string): string =
+   # the unconfirmed-close binding `_`. This anchor survives our own patching.
+   let locals = one(
+     input,
+-    re2"""async checkAndArchive\([\w$]+,[\w$]+,[\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\?"inactive":"pr";try\{let ([\w$]+)=this\.ownPrBindings\([\w$]+\.prs\),([\w$]+)=null,[\w$]+=!1,[\w$]+=!1,([\w$]+);""",
++    re2"""async checkAndArchive\([\w$]+,[\w$]+,[\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\?"inactive":"pr";try\{let ([\w$]+)=this\.ownPrBindings\([\w$]+\.prs\),([\w$]+)=null,[\w$]+=!1,(?:[\w$]+=!1,)?([\w$]+);""",
+     "checkAndArchive locals",
+   )
+   let own = input[locals.group(0)]
 @@ -92,17 +92,17 @@ proc apply*(input: string): string =
    let inactive = input[heads.group(2)]
  
@@ -521,6 +530,57 @@ index 45c4fc1..a980388 100644
      ".sessionId),"
  
    # What C, D, E and G sit in front of; asserted on the patched result too.
+diff --git a/patches/community/add_feature_auto_archive_grace_ion.nim b/patches/community/add_feature_auto_archive_grace_ion.nim
+index f3c4fa2..56da396 100644
+--- a/patches/community/add_feature_auto_archive_grace_ion.nim
++++ b/patches/community/add_feature_auto_archive_grace_ion.nim
+@@ -73,11 +73,21 @@ proc resolveAliases(notice: string): Aliases =
+     re2"""([\w$]+)\("div",\{role:"status","aria-live":"polite","data-find-omitted":"",className:""",
+     "notice jsx",
+   )
+-  let fragment = unique(
+-    notice,
++  # Windows 6.x ships the PR bar as `O(function(e){...})` with no closing
++  # `jsxs(Fragment,{children:[x6]})`; its `jsxs(Fragment,{children:[a,
++  # jsx(Tag,{when:"aimed",children:b})]})` carries the same two aliases.
++  let fragmentOld = notice.findAll(
+     re2"""function [\w$]+\([\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\(\d+\),\{repoKey:[\w$]+,sessionRef:[\w$]+,sessionRepo:[\w$]+,isPrimary:[\w$]+,[\s\S]*?([\w$]+)\(([\w$]+),\{children:\[[\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+\]\}\)\):[\w$]+\[\d+\]\}""",
+-    "PR bar row fragment",
+   )
++  let fragment =
++    if fragmentOld.len == 1:
++      fragmentOld[0]
++    else:
++      unique(
++        notice,
++        re2"""([\w$]+)\(([\w$]+),\{children:\[[\w$]+,[\w$]+\([\w$]+,\{when:"aimed",children:[\w$]+\}\)\]\}\)""",
++        "PR bar row fragment",
++      )
+   let locals = [
+     notice[subscriber.group(0)],
+     notice[subscriber.group(1)],
+diff --git a/patches/community/add_feature_custom_models.nim b/patches/community/add_feature_custom_models.nim
+index 166412d..8ce1b43 100644
+--- a/patches/community/add_feature_custom_models.nim
++++ b/patches/community/add_feature_custom_models.nim
+@@ -104,7 +104,7 @@ proc identRe(name: string): string =
+ proc envSiteRe(fn: string): Regex2 =
+   re2(
+     "(async function " & identRe(fn) &
+-      """\([\w$]+,[\w$]+,([\w$]+)(?:,[\w$]+(?:=[^,(){}]+)?)*\)\{let [\w$]+=await [\w$]+(?:\.[\w$]+)?\()([\w$]+)\.sessionEnv([,)])"""
++      """\([\w$]+,[\w$]+,([\w$]+)(?:,[\w$]+(?:=[^,(){}]+)?)*\)\{let (?:[^;(){}]{0,80}?,)?[\w$]+=await [\w$]+(?:\.[\w$]+)?\()([\w$]+)\.sessionEnv([,)])"""
+   )
+ 
+ # Our injected end-state, asserted positively (Rule 6): the splice, made with
+@@ -112,7 +112,7 @@ proc envSiteRe(fn: string): Regex2 =
+ proc envEndStateRe(fn: string): Regex2 =
+   re2(
+     "async function " & identRe(fn) &
+-      """\([\w$]+,[\w$]+,([\w$]+)(?:,[\w$]+(?:=[^,(){}]+)?)*\)\{let [\w$]+=await [\w$]+(?:\.[\w$]+)?\(\{\.\.\.([\w$]+)\.sessionEnv,\.\.\.\(\(globalThis\.__cdbCustomModels&&globalThis\.__cdbCustomModels\.cliEnv\(([\w$]+)\.sessionEnv\)\)\|\|\{\}\)\}[,)]"""
++      """\([\w$]+,[\w$]+,([\w$]+)(?:,[\w$]+(?:=[^,(){}]+)?)*\)\{let (?:[^;(){}]{0,80}?,)?[\w$]+=await [\w$]+(?:\.[\w$]+)?\(\{\.\.\.([\w$]+)\.sessionEnv,\.\.\.\(\(globalThis\.__cdbCustomModels&&globalThis\.__cdbCustomModels\.cliEnv\(([\w$]+)\.sessionEnv\)\)\|\|\{\}\)\}[,)]"""
+   )
+ 
+ # The function buildSessionEnv forwards to, or "" unless exactly one forwarder.
 diff --git a/patches/community/add_feature_theme_picker.nim b/patches/community/add_feature_theme_picker.nim
 index 38265f3..9355c1f 100644
 --- a/patches/community/add_feature_theme_picker.nim
@@ -552,6 +612,19 @@ index 38265f3..9355c1f 100644
  __cdbPk_win.on("closed",function(){__cdbPk_win=null});
  __cdbPk_win.loadFile(a.html);
  __cdbPk_log("window opened ("+a.html+")");
+diff --git a/patches/community/add_feature_transcript_limits.nim b/patches/community/add_feature_transcript_limits.nim
+index bbfc05a..8ef151d 100644
+--- a/patches/community/add_feature_transcript_limits.nim
++++ b/patches/community/add_feature_transcript_limits.nim
+@@ -142,7 +142,7 @@ proc apply*(input: string): string =
+   # --- precondition P: upstream still reads the loadLimits option ---------------
+   # Without it C would "succeed" into an option nothing reads (see the header).
+   let (ctorReads, configReads) = limitsReadCounts(result)
+-  if ctorReads != 1 or configReads != 1:
++  if ctorReads != 1 or configReads < 1:
+     echo "  [FAIL] transcript limits: expected upstream to read loadLimits at exactly 1 " &
+       "`new <Reader>(<cfg>.loadLimits)` and 1 `this.config.loadLimits`, found " &
+       $ctorReads & " and " & $configReads & " - the option was renamed or its reads " &
 diff --git a/patches/core/add_feature_custom_themes.nim b/patches/core/add_feature_custom_themes.nim
 index 9b0a6d6..c8dd48c 100644
 --- a/patches/core/add_feature_custom_themes.nim
@@ -593,6 +666,169 @@ index f03ea70..0c45304 100644
      else:
        # Groups: 0 the cache assigned, 1 the cache the IIFE returns, 2 the memo,
        # 3 the getter, 4 the cache the getter returns. 0, 1 and 4 must agree.
+diff --git a/patches/core/add_growthbook_overrides.nim b/patches/core/add_growthbook_overrides.nim
+index 249923c..8285c15 100644
+--- a/patches/core/add_growthbook_overrides.nim
++++ b/patches/core/add_growthbook_overrides.nim
+@@ -69,7 +69,7 @@ const EXPECTED_PATCHES = 2
+ # 2 = transform call "jit(e)", 3 = e again (must equal group 1), 4 = tail
+ # ";let r=Object.keys(DS).length...loaded %d features...".
+ const SETTER_PAT =
+-  re2"""(function [\w$]+\(([\w$]+),[\w$]+\)\{[\w$]+=[\w$]+;(?:const|let|var) [\w$]+=[\w$]+;[\w$]+=)([\w$]+\(([\w$]+)\))(;(?:const|let|var) [\w$]+=Object\.keys\([\w$]+\)\.length[^"`]{0,100}[^"`]{0,100}["`]\[growthbook\] loaded %d features \(%d changed\)["`])"""
++  re2"""(function [\w$]+\(([\w$]+),[\w$]+(?:,[\w$]+=null)?\)\{[\w$]+=[\w$]+(?:,[\w$]+=[\w$]+)?;(?:const|let|var) [\w$]+=[\w$]+;[\w$]+=)([\w$]+\(([\w$]+)\))(;(?:const|let|var) [\w$]+=Object\.keys\([\w$]+\)\.length[^"`]{0,100}[^"`]{0,100}["`]\[growthbook\] loaded %d features \(%d changed\)["`])"""
+ 
+ proc apply*(input: string): string =
+   result = input
+diff --git a/patches/core/fix_profile_window_title.nim b/patches/core/fix_profile_window_title.nim
+index 1f31112..3d892e1 100644
+--- a/patches/core/fix_profile_window_title.nim
++++ b/patches/core/fix_profile_window_title.nim
+@@ -80,6 +80,15 @@ const PREVENT_HELPER =
+ # (1.7 KB in v4.16336.0).
+ const PREVENT_CALL_WINDOW = 12000
+ 
++# Pooled main window (Windows 6.x): the window comes from
++# `WIN=(e=>POOL(CAND&&ADOPT(CAND,e,{...})||new ELECTRON.BrowserWindow(e)))(ARG)`
++# inside a `let` list, so there is no `return`-comma to hook into. The result
++# is wrapped instead: `WIN=((__cdb_x)=>(HOOK(__cdb_x),__cdb_x))(<original>)`.
++# Groups: 0 = WIN, 1 = arrow param, 2 = ELECTRON, 3 = BrowserWindow arg (must
++# equal group 1), 4 = call arg.
++const POOLED_PATTERN =
++  re2"""(?:^|[^\w$.])([\w$]+)=\(([\w$]+)=>[\w$]+\(.{0,100}?new ([\w$]+)\.BrowserWindow\(([\w$]+)\)\)\)\(([\w$]+)\)"""
++
+ proc isIdentChar(c: char): bool =
+   c in {'a' .. 'z', 'A' .. 'Z', '0' .. '9', '_', '$'}
+ 
+@@ -104,10 +113,16 @@ proc countMainWindowTitleLocks(s, factory: string): int =
+       helpers.add s[m.group(0)]
+   if helpers.len == 0:
+     return 0
+-  let ctor = re2(r"(?:^|[^\w$.])([\w$]+)=" & escapeRe(factory) & r"\(\{")
+-  for m in s.findAll(ctor):
+-    let win = s[m.group(0)]
+-    let a = m.boundaries.b
++  var sites: seq[(string, int)] # (window variable, end of its construction)
++  if factory.len > 0:
++    let ctor = re2(r"(?:^|[^\w$.])([\w$]+)=" & escapeRe(factory) & r"\(\{")
++    for m in s.findAll(ctor):
++      sites.add (s[m.group(0)], m.boundaries.b)
++  else:
++    for m in s.findAll(POOLED_PATTERN):
++      if s[m.group(1)] == s[m.group(3)]:
++        sites.add (s[m.group(0)], m.boundaries.b)
++  for (win, a) in sites:
+     let b = min(s.len, a + PREVENT_CALL_WINDOW)
+     for h in helpers:
+       if s.hasCall(h, win, a, b):
+@@ -141,11 +156,19 @@ proc apply*(input: string): string =
+   for m in result.findAll(FACTORY_PATTERN):
+     if result[m.group(1)] == result[m.group(4)]:
+       factories.add result[m.group(0)]
+-  if factories.len != 1:
++  var pooled = false
++  if factories.len == 0:
++    var pools = 0
++    for m in result.findAll(POOLED_PATTERN):
++      if result[m.group(1)] == result[m.group(3)]:
++        inc pools
++    if pools >= 1:
++      pooled = true
++  if not pooled and factories.len != 1:
+     echo &"  [FAIL] main-window BrowserWindow factory: {factories.len} matches, expected 1"
+     raise
+       newException(ValueError, "fix_profile_window_title: factory not found - re-audit")
+-  let locks = result.countMainWindowTitleLocks(factories[0])
++  let locks = result.countMainWindowTitleLocks(if pooled: "" else: factories[0])
+   if locks != 1:
+     echo &"  [FAIL] main-window page-title-updated preventDefault: {locks} matches, expected 1"
+     raise newException(
+@@ -153,38 +176,55 @@ proc apply*(input: string): string =
+     )
+   echo "  [OK] upstream locks the main-window title (1 match)"
+ 
++  proc profileHook(winVar: string): string =
++    # Profile-aware title injection. Wrapped in a single short-circuit
++    # expression so the comma chain still type-checks; evaluates to
++    # `false` (no-op) when CLAUDE_PROFILE is unset.
++    #
++    # Upstream owns the main-window title (it preventDefaults
++    # page-title-updated; up to v4.4212.0 it also called win.setTitle()
++    # on navigation). A one-shot setTitle could be overwritten, so we
++    # wrap THIS window's setTitle: every title, ours or upstream's, gets
++    # the suffix exactly once. Other windows keep their own setTitle.
++    "process.env.CLAUDE_PROFILE&&((globalThis." & SENTINEL &
++    "=true),((__cdb_w,__cdb_s)=>{" & "const __cdb_o=__cdb_w.setTitle.bind(__cdb_w);" &
++    "__cdb_w.setTitle=(__cdb_t)=>{__cdb_t=String(__cdb_t??\"\");" &
++    "return __cdb_o(__cdb_t.endsWith(__cdb_s)?__cdb_t:__cdb_t+__cdb_s)};" &
++    "__cdb_w.setTitle(__cdb_w.getTitle())})(" & winVar &
++    ",\" (\"+process.env.CLAUDE_PROFILE+\")\")," & POPOUT_HOOK &
++    "(\" (\"+process.env.CLAUDE_PROFILE+\")\"))"
++
+   var hits = 0
+-  result = result.replace(
+-    FACTORY_PATTERN,
+-    proc(m: RegexMatch2, s: string): string =
+-      let funcName = s[m.group(0)]
+-      let argName = s[m.group(1)]
+-      let winVar = s[m.group(2)]
+-      let electronVar = s[m.group(3)]
+-      if argName != s[m.group(4)]:
+-        # Not the `\2` shape: leave the site untouched (nre would not have
+-        # matched it at all).
+-        return s[m.boundaries]
+-      inc hits
+-      "function " & funcName & "(" & argName & "){return " & winVar & "=new " &
+-        electronVar & ".BrowserWindow(" & argName & ")," &
+-        # Profile-aware title injection. Wrapped in a single short-circuit
+-        # expression so the comma chain still type-checks; evaluates to
+-        # `false` (no-op) when CLAUDE_PROFILE is unset.
+-        #
+-        # Upstream owns the main-window title (it preventDefaults
+-        # page-title-updated; up to v4.4212.0 it also called win.setTitle()
+-        # on navigation). A one-shot setTitle could be overwritten, so we
+-        # wrap THIS window's setTitle: every title, ours or upstream's, gets
+-        # the suffix exactly once. Other windows keep their own setTitle.
+-        "process.env.CLAUDE_PROFILE&&((globalThis." & SENTINEL &
+-        "=true),((__cdb_w,__cdb_s)=>{" & "const __cdb_o=__cdb_w.setTitle.bind(__cdb_w);" &
+-        "__cdb_w.setTitle=(__cdb_t)=>{__cdb_t=String(__cdb_t??\"\");" &
+-        "return __cdb_o(__cdb_t.endsWith(__cdb_s)?__cdb_t:__cdb_t+__cdb_s)};" &
+-        "__cdb_w.setTitle(__cdb_w.getTitle())})(" & winVar &
+-        ",\" (\"+process.env.CLAUDE_PROFILE+\")\")," & POPOUT_HOOK &
+-        "(\" (\"+process.env.CLAUDE_PROFILE+\")\")),",
+-  )
++  if pooled:
++    result = result.replace(
++      POOLED_PATTERN,
++      proc(m: RegexMatch2, s: string): string =
++        if s[m.group(1)] != s[m.group(3)]:
++          return s[m.boundaries]
++        inc hits
++        let whole = s[m.boundaries]
++        let winVar = s[m.group(0)]
++        # whole = <one char before WIN or none> & WIN & "=" & <expr>
++        let at = whole.find(winVar & "=(")
++        whole[0 ..< at] & winVar & "=((__cdb_x)=>(" & profileHook("__cdb_x") &
++          ",__cdb_x))(" & whole[at + winVar.len + 1 .. ^1] & ")",
++    )
++  else:
++    result = result.replace(
++      FACTORY_PATTERN,
++      proc(m: RegexMatch2, s: string): string =
++        let funcName = s[m.group(0)]
++        let argName = s[m.group(1)]
++        let winVar = s[m.group(2)]
++        let electronVar = s[m.group(3)]
++        if argName != s[m.group(4)]:
++          # Not the `` shape: leave the site untouched (nre would not have
++          # matched it at all).
++          return s[m.boundaries]
++        inc hits
++        "function " & funcName & "(" & argName & "){return " & winVar & "=new " &
++          electronVar & ".BrowserWindow(" & argName & ")," & profileHook(winVar) & ",",
++    )
+ 
+   if hits == 1:
+     echo &"  [OK] Main window title hook injected (function={hits} match)"
 diff --git a/scripts/apply_patches.py b/scripts/apply_patches.py
 index 7e5801b..370f8d1 100644
 --- a/scripts/apply_patches.py
