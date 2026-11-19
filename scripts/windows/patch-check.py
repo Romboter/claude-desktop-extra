@@ -150,8 +150,9 @@ def main():
         lines = [l for l in out.splitlines() if re.search(r"^=== Patch|FAIL|\[ERROR\]|Error:", l)]
         failed, cur = [], None
         for l in out.splitlines():
-            if l.startswith("=== Patch"):
-                cur = l.split(":", 1)[1].strip(" =")
+            m = re.match(r"=== Patch: (\S+)", l)
+            if m:
+                cur = m.group(1)
             elif "[FAIL]" in l and "exited with code" in l:
                 failed.append(cur)
         print("\n".join(l for l in lines if "FAIL" in l or "ERROR" in l or "Error:" in l))
