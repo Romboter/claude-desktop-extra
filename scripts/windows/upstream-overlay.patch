@@ -102,7 +102,7 @@ index 3214c79..93578a6 100644
      // pathological; spaces are deliberately ALLOWED, because "my notes.md" is an
      // ordinary tracked file and rejecting it would drop that one file back to the
 diff --git a/js/extra_settings_main.js b/js/extra_settings_main.js
-index b13bfdf..ec38eb7 100644
+index 82461c4..ac980d3 100644
 --- a/js/extra_settings_main.js
 +++ b/js/extra_settings_main.js
 @@ -477,7 +477,7 @@
@@ -123,7 +123,7 @@ index b13bfdf..ec38eb7 100644
      return /-3p$/.test(ud) ? ud : ud + "-3p";
    }
  
-@@ -4581,8 +4583,6 @@
+@@ -4624,8 +4626,6 @@
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix author option is Linux only" }; };
        } else if (ch.indexOf("cdb-tray:") === 0) {
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the tray icon switch is Linux only" }; };
@@ -133,10 +133,10 @@ index b13bfdf..ec38eb7 100644
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix ready-to-merge wake is Linux only" }; };
        } else if (ch.indexOf("cdb-session-start:") === 0) {
 diff --git a/js/extra_settings_page.js b/js/extra_settings_page.js
-index 70cd7fd..a75148a 100644
+index 6e5f2ba..986a5a3 100644
 --- a/js/extra_settings_page.js
 +++ b/js/extra_settings_page.js
-@@ -576,12 +576,12 @@
+@@ -588,12 +588,12 @@
      { kind: "flags", label: "Anthropic", icon: ICON_FLAGS, tooltip: "Anthropic Features" },
      { kind: "deploy", label: "Deployment", icon: ICON_DEPLOY }
    ];
@@ -155,7 +155,7 @@ index 70cd7fd..a75148a 100644
    if (/^Win/.test((typeof navigator !== "undefined" && navigator.platform) || "")) {
      NAV_ITEMS = NAV_ITEMS.filter(function (it) { return WINDOWS_NAV[it.kind] === true; });
    }
-@@ -2952,8 +2952,8 @@
+@@ -2972,8 +2972,8 @@
    function restartButton() {
      var restart = el("button", "cdbx-btn", "Restart now");
      restart.type = "button";
@@ -166,7 +166,7 @@ index 70cd7fd..a75148a 100644
      restart.addEventListener("click", function () {
        restart.disabled = true;
        restart.textContent = "Restarting...";
-@@ -4071,6 +4071,28 @@
+@@ -4170,6 +4170,28 @@
        renderCuEscapeAbortRow
      ] }
    ];
@@ -195,7 +195,7 @@ index 70cd7fd..a75148a 100644
  
    function renderFeatures(panel) {
      clear(panel);
-@@ -4517,7 +4539,7 @@
+@@ -4616,7 +4638,7 @@
  
  
        var files = el("div", "cdbx-note cdbx-models-files",
@@ -204,7 +204,7 @@ index 70cd7fd..a75148a 100644
          "Routing changes (a key, a model, a provider) reach open sessions at once through " + (st.paths && st.paths.routes) +
          ". New models show in the picker after the Code tab reloads. Sub-agent types, the default sub-agent " +
          "model, the small/fast model and the system-prompt line are handed to each session as it opens. A " +
-@@ -4834,7 +4856,7 @@
+@@ -4934,7 +4956,7 @@
        var url = field(form, "Base URL", input("text", existing ? existing.baseUrl : "", "https://api.example.com/anthropic"),
          "The Anthropic-compatible endpoint; /v1/messages is appended.");
        var key = field(form, "API key", input("password", "", existing && existing.keyOk ? "stored - type to replace" : "API key"),
@@ -213,7 +213,7 @@ index 70cd7fd..a75148a 100644
        var modelsUrl = field(form, "Models list URL", input("text", existing ? existing.modelsUrl || "" : "", "optional - found automatically"),
          "Where the provider lists its models (GET, OpenAI or Anthropic shape), on the base URL's host - the key " +
          "goes nowhere else. Left empty, fetch models tries the preset's address, then <base URL>/v1/models, " +
-@@ -5333,9 +5355,8 @@
+@@ -5440,9 +5462,8 @@
      var notice = el("div", "cdbx-notice");
      notice.appendChild(el("div", "cdbx-notice-title", "Changes here require a restart of Claude Desktop"));
      notice.appendChild(el("div", "cdbx-notice-body",
@@ -415,10 +415,10 @@ index ddd96fb..4701d1d 100644
    globalThis.__cdbPanelTabsMain = true;
  
 diff --git a/js/theme_picker_page.html b/js/theme_picker_page.html
-index d3a308e..d72c536 100644
+index 1057cda..7bd636a 100644
 --- a/js/theme_picker_page.html
 +++ b/js/theme_picker_page.html
-@@ -921,7 +921,7 @@ kbd{
+@@ -931,7 +931,7 @@ kbd{
    function boot() {
      if (!window.cdbThemes) {
        fail("The theme bridge did not load",
@@ -441,7 +441,7 @@ index 7f8b2ec..e944ca0 100644
    globalThis.__cdbTranscriptLimitsMain = true;
  
 diff --git a/patches/Makefile b/patches/Makefile
-index f0e3836..af3ee9f 100644
+index f79c42f..f120456 100644
 --- a/patches/Makefile
 +++ b/patches/Makefile
 @@ -1,9 +1,10 @@
@@ -465,7 +465,7 @@ index f0e3836..af3ee9f 100644
  BINS := $(SRCS:.nim=)
  
  ifeq ($(strip $(SRCS)),)
-@@ -199,5 +200,11 @@ community/add_feature_jira_tracker: \
+@@ -209,5 +210,11 @@ community/add_feature_jira_tracker: \
    ../js/jira_tracker_web_page.js
  
  
@@ -553,10 +553,10 @@ index 38265f3..9355c1f 100644
  __cdbPk_win.loadFile(a.html);
  __cdbPk_log("window opened ("+a.html+")");
 diff --git a/patches/core/add_feature_custom_themes.nim b/patches/core/add_feature_custom_themes.nim
-index c556a13..bb0a16d 100644
+index 9b0a6d6..c8dd48c 100644
 --- a/patches/core/add_feature_custom_themes.nim
 +++ b/patches/core/add_feature_custom_themes.nim
-@@ -236,7 +236,7 @@ static:
+@@ -244,7 +244,7 @@ static:
  # Head of the injected IIFE: helpers + the curated built-in themes.
  const THEME_INJECTION_JS_HEAD =
    """;(function(){
@@ -565,7 +565,7 @@ index c556a13..bb0a16d 100644
  var _path=require("path"),_fs=require("fs"),_app=require("electron").app,_nt=require("electron").nativeTheme,_BW=require("electron").BrowserWindow;
  // The effective app mode: upstream sets nativeTheme.themeSource from its Appearance setting, so
  // shouldUseDarkColors is the mode the renderer shows (system/light/dark all resolve here).
-@@ -403,7 +403,7 @@ __cdb_migrate();
+@@ -416,7 +416,7 @@ __cdb_migrate();
  // js/extra_settings_main.js: if they disagree, the theme engine and the flag
  // loader disagree about what the very same file says.
  var __cdb_stripJsonc=function(s){var o="",q=false,i=0;while(i<s.length){var c=s[i];if(q){o+=c;if(c==="\\"&&i+1<s.length){o+=s[i+1];i++}else if(c==='"'){q=false}i++;continue}if(c==='"'){q=true;o+=c;i++;continue}if(c==="/"&&s[i+1]==="/"){while(i<s.length&&s[i]!=="\n")i++;continue}if(c==="/"&&s[i+1]==="*"){i+=2;while(i<s.length&&!(s[i]==="*"&&s[i+1]==="/"))i++;i+=2;continue}if(c===","){var j=i+1;while(j<s.length){if(s[j]===" "||s[j]==="\t"||s[j]==="\r"||s[j]==="\n"){j++;continue}if(s[j]==="/"&&s[j+1]==="/"){while(j<s.length&&s[j]!=="\n")j++;continue}if(s[j]==="/"&&s[j+1]==="*"){j+=2;while(j<s.length&&!(s[j]==="*"&&s[j+1]==="/"))j++;j+=2;continue}break}if(s[j]==="}"||s[j]==="]"){i++;continue}}o+=c;i++}return o};
@@ -594,7 +594,7 @@ index f03ea70..0c45304 100644
        # Groups: 0 the cache assigned, 1 the cache the IIFE returns, 2 the memo,
        # 3 the getter, 4 the cache the getter returns. 0, 1 and 4 must agree.
 diff --git a/scripts/apply_patches.py b/scripts/apply_patches.py
-index 875b0ef..3ac15a8 100644
+index 7e5801b..370f8d1 100644
 --- a/scripts/apply_patches.py
 +++ b/scripts/apply_patches.py
 @@ -11,7 +11,11 @@ target location.
@@ -612,7 +612,7 @@ index 875b0ef..3ac15a8 100644
  path that build-patched-tarball.sh uses as "$WORK_DIR/app".
 @@ -35,6 +39,40 @@ PATCH_SUBDIRS = ("linux", "core", "community")
  # remove a patch.
- EXPECTED_PATCH_COUNT = 74
+ EXPECTED_PATCH_COUNT = 76
  
 +# The Windows build (--windows). patches/windows/ holds the Windows-only
 +# patches; they are applied AFTER the shared ones (on a shared target, their
@@ -725,7 +725,7 @@ index 875b0ef..3ac15a8 100644
      nim_jobs_by_target = {}  # real_target -> list[(patch_file, nim_binary)]
  
 diff --git a/scripts/run-feature-tests.sh b/scripts/run-feature-tests.sh
-index a110518..6ba32d7 100755
+index 5caea23..e357bae 100644
 --- a/scripts/run-feature-tests.sh
 +++ b/scripts/run-feature-tests.sh
 @@ -1,5 +1,5 @@
@@ -743,7 +743,7 @@ index a110518..6ba32d7 100755
  
  set -uo pipefail
  
-@@ -34,17 +35,25 @@ EXPECTED_TEST_HARNESSES=101
+@@ -34,17 +35,25 @@ EXPECTED_TEST_HARNESSES=103
  CATEGORIES=(community core linux)
  
  usage() {
@@ -901,10 +901,10 @@ index 406b6a1..33c1ce4 100644
  const temp = fs.mkdtempSync(join(os.tmpdir(), "cdb-jira-send-"));
  const repo = join(temp, "repo"), link = join(temp, "repo-link"), plainDir = join(temp, "plain");
 diff --git a/scripts/tests/core/test-extra-settings-dom.mjs b/scripts/tests/core/test-extra-settings-dom.mjs
-index 4eb7203..6b54c3c 100644
+index 878e76a..ef99ddc 100644
 --- a/scripts/tests/core/test-extra-settings-dom.mjs
 +++ b/scripts/tests/core/test-extra-settings-dom.mjs
-@@ -3538,12 +3538,32 @@ async function run() {
+@@ -3746,11 +3746,12 @@ async function run() {
    const box = navbox();
  
    // --- the Windows build: the page runs with navigator.platform "Win32" and
@@ -915,10 +915,18 @@ index 4eb7203..6b54c3c 100644
 -    ok(items.length === 1, "Windows: one row was added (" + items.length + ")");
 -    ok(items.length === 1 && items[0].textContent.trim() === "Models",
 -       "Windows: the row is Models (" + (items[0] ? items[0].textContent.trim() : "none") + ")");
--    if (items.length === 1) await assertPanelMounts(items[0]);
 +    const names = items.map(function (it) { return it.textContent.trim(); });
 +    ok(names.join(",") === "Themes,Community,Models,Anthropic",
 +       "Windows: Themes, Community, Models and Anthropic, no Deployment (" + names.join(",") + ")");
+     window.__cmConfig = { ok: true, enabled: true, configured: true, lockedByJsonc: false, source: "default",
+       surfaces: ["ccd", "code"], models: 1, webSearch: "", webSearchLocked: false,
+       smallFastModel: "", smallFastModelLocked: false, searchConflict: "", subagentModel: "", subagentModelLocked: false,
+@@ -3766,8 +3767,29 @@ async function run() {
+         keySource: "stored", preset: "opencode-go", sessionHeader: "x-opencode-session", effort: ["low", "max"], context: "1m",
+         models: [{ id: "glm-5.3", alias: "claude-glm-5.3", listedAs: ["claude-glm-5.3[1m]"], name: "GLM-5.3",
+           description: "", vision: false, thinking: true, context: "1m", effort: ["low", "max"], effortDefault: "max", badge: "", agent: false }] }] };
+-    if (items.length === 1) {
+-      await assertPanelMounts(items[0]);
 +    for (const it of items) await assertPanelMounts(it);
 +    const community = items[names.indexOf("Community")];
 +    if (community) {
@@ -939,6 +947,9 @@ index 4eb7203..6b54c3c 100644
 +      });
 +      ok(!!(panel && panel.querySelector("#cdbx-archive-grace-preset")), "Windows: the shipped row is there: the PR archive delay");
 +    }
-     return;
-   }
- 
++    const modelsItem = items[names.indexOf("Models")];
++    if (modelsItem) {
++      await assertPanelMounts(modelsItem);
+       const winPanel = document.querySelector(".cdbx-panel");
+       const winCard = winPanel && winPanel.querySelector(".cdbx-models-card");
+       ok(!!winCard && /session header x-opencode-session/.test(winCard.querySelector(".cdbx-state").textContent),
