@@ -1,0 +1,87 @@
+Claude Desktop Extra for Windows 11
+===================================
+
+Anthropic's official Claude Desktop for Windows, patched by
+claude-desktop-extra to add:
+
+  * Profiles - several separate Claude instances side by side, each with its
+    own sign-in, settings and Claude Code configuration.
+  * Settings > Extra:
+      Themes     - bundled color themes, Ctrl+Shift+T picker
+      Community  - opt-in extras: Code tab diff view modes, panel tabs, files
+                   quick open (Ctrl+P), load large sessions in full, allow
+                   non-Anthropic models (3P gateways), developer tools,
+                   the Jira issue tracker (Ctrl+Shift+J), and a delay
+                   before a session is archived after its PR merges
+      Models     - custom models from other providers (DeepSeek, OpenRouter,
+                   a LiteLLM gateway, Anthropic's API on your API credit...)
+                   in the Code tab's model picker
+      Anthropic  - feature flag overrides
+
+This is an unofficial build. It is not made or supported by Anthropic.
+
+
+Install
+-------
+
+1. Unzip the download anywhere.
+2. Double-click Install.cmd.
+   It unpacks the app (app.zip) to %LOCALAPPDATA%\Programs\Claude Desktop
+   Extra and adds "Claude (Extra)" to the Start Menu. No administrator rights
+   are needed. Do not unzip app.zip yourself: some of its paths are too long
+   for Windows' limit when unpacked under a download folder.
+
+Windows may warn about Install.cmd ("Windows protected your PC"): this build
+is not signed, because patching the app breaks Anthropic's signature. Click
+"More info", then "Run anyway".
+
+Smart App Control (Windows Security > App & browser control) blocks unsigned
+apps: while it is on, this build will not start.
+
+If the official Claude app is installed too, quit it before starting this one:
+the default profile shares its data folder (%APPDATA%\Claude), so you stay
+signed in, but only one of the two can run at a time.
+
+
+Profiles
+--------
+
+  Install.cmd -Profile work          add "Claude (work)" to the Start Menu
+  Install.cmd -Profile work -Desktop the same, plus a desktop shortcut
+  Install.cmd -RemoveProfile work    remove that shortcut (its data stays)
+
+Or start one directly:  claude.exe --profile=work
+
+A profile named "work" keeps its data in %APPDATA%\Claude-work and its Claude
+Code configuration in %USERPROFILE%\.claude-work. The window title shows the
+profile name. Names use letters, digits, '-' and '_'.
+
+Signing in to a profile: start the sign-in from that profile's window and
+finish it within 5 minutes; the browser's callback is sent back to it.
+
+
+Custom models
+-------------
+
+Settings > Extra > Models > Add a provider. Pick a preset or enter the base
+URL, paste the API key, fetch or add models, turn the switch on and click
+"Reload the Code tab". Full guide:
+https://github.com/patrickjaja/claude-desktop-extra/blob/master/docs/custom-models.md
+
+The settings live in claude-desktop-extra.json in the profile's folder
+(%APPDATA%\Claude for the default profile). To edit settings by hand, use
+claude-desktop-extra.jsonc in the same folder, saved as UTF-8 without a
+byte-order mark (Notepad's default).
+
+
+Good to know
+------------
+
+  * No automatic updates. When a newer build is out, the app says so once
+    (a dialog with "Open download page"); download it and run Install.cmd
+    again (your data and sign-in are kept). To turn the notice off, set the
+    environment variable CDB_UPDATE_NOTICE=0.
+  * "Start at login" in Claude's settings starts the default profile.
+  * Logs: %APPDATA%\Claude\logs (claude-patches.log, custom-models.log), or
+    %APPDATA%\Claude-<name>\logs for a profile.
+  * Uninstall: Install.cmd -Uninstall (your data is kept).
