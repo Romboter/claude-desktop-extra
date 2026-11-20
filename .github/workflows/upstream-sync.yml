@@ -1,4 +1,4 @@
-name: Upstream Sync
+name: "Windows: Sync Upstream & Release"
 
 # Every 6 hours: keep this fork on upstream (patrickjaja/claude-desktop-extra)
 # and publish a new Windows build when anything moved.
