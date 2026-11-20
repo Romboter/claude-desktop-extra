@@ -1,4 +1,4 @@
-name: Build Windows
+name: "Windows: Build & Publish"
 
 # The portable Windows 11 build (docs/windows.md): Anthropic's official Windows
 # package, patched with the Windows patch set (apply_patches.py --windows on a

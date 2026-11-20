@@ -4,7 +4,7 @@
 # built once at a pinned commit and handed to both legs, so what is probed is
 # the complete package, not a bridge-less variant.
 ---
-name: Reproducibility Probe
+name: "Linux: Reproducibility Probe"
 on:
   workflow_dispatch:
   push:
