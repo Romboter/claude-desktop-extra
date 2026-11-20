@@ -33,7 +33,7 @@ Check before committing: `git diff --diff-filter=M upstream/master...HEAD --stat
 | `packaging/windows/` | `Install.cmd`, `Install-ClaudeExtra.ps1`, `README-Windows.txt` |
 | `scripts/tests/windows/` | Windows harnesses; run them on a prepared copy (the overlaid upstream tests too) |
 | `.github/workflows/build-windows.yml` | Build x64 + arm64, boot each on a Windows runner of its architecture, publish `windows-v<version>` (`--latest=false`) |
-| `.github/workflows/upstream-sync.yml` | Every 6 hours: sync master, rebuild + publish when upstream or Anthropic's Windows version moved (or while a failure issue is open), report failures |
+| `.github/workflows/upstream-sync.yml` | Every 2 hours: sync master, rebuild + publish when upstream moved or Anthropic's Windows version (RELEASES) is HIGHER than the highest published `windows-v`, report failures. While the "Automatic update failed" issue is open it builds and merges nothing and only reports how far behind it is; run it by hand with `force_build` after a fix (a green run closes the issue), or close the issue |
 
 ## Checks for a Windows change
 
