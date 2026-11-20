@@ -1,6 +1,6 @@
 # Claude Desktop for Windows (Extra)
 
-[![Build Windows](https://github.com/Romboter/claude-desktop-extra/actions/workflows/build-windows.yml/badge.svg)](https://github.com/Romboter/claude-desktop-extra/actions/workflows/build-windows.yml)
+[![Windows build](https://img.shields.io/github/v/release/Romboter/claude-desktop-extra?filter=windows-v%2A&label=Windows%20build)](https://github.com/Romboter/claude-desktop-extra/releases)
 [![Upstream Sync](https://github.com/Romboter/claude-desktop-extra/actions/workflows/upstream-sync.yml/badge.svg)](https://github.com/Romboter/claude-desktop-extra/actions/workflows/upstream-sync.yml)
 
 **Anthropic's official Claude Desktop for Windows, with extras on top:** separate profiles, themes, Code tab add-ons and custom models. It is experimental and unofficial.
