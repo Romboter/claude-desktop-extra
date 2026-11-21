@@ -6,7 +6,7 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WF="$REPO/.github/workflows/build-windows.yml"
-ver() { sed -n "s/^  $1: *//p" "$WF" | head -1 | tr -d ''; }
+ver() { sed -n "s/^  $1: *//p" "$WF" | head -1 | tr -d "[:cntrl:]"; }
 NODE_VERSION=$(ver NODE_VERSION); NIM_VERSION=$(ver NIM_VERSION); ASAR_VERSION=$(ver ASAR_VERSION)
 
 missing=(); for c in curl make gcc zip unzip python3 xz git; do command -v "$c" >/dev/null || missing+=("$c"); done
