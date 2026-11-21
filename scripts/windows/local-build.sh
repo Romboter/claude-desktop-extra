@@ -6,15 +6,15 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WF="$REPO/.github/workflows/build-windows.yml"
-ver() { sed -n "s/^  $1: *//p" "$WF" | head -1; }
+ver() { sed -n "s/^  $1: *//p" "$WF" | head -1 | tr -d ""; }
 NODE_VERSION=$(ver NODE_VERSION); NIM_VERSION=$(ver NIM_VERSION); ASAR_VERSION=$(ver ASAR_VERSION)
 
 missing=(); for c in curl make gcc zip unzip python3 xz git; do command -v "$c" >/dev/null || missing+=("$c"); done
 [ ${#missing[@]} -eq 0 ] || { echo "Missing: ${missing[*]}  ->  sudo apt-get install -y build-essential zip unzip python3 xz-utils curl git" >&2; exit 1; }
 
 T="$HOME/.cache/cde-tools"; mkdir -p "$T"
-[ -d "$T/node-v$NODE_VERSION-linux-x64" ] || curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" | tar -xJ -C "$T"
-[ -d "$T/nim-$NIM_VERSION" ] || curl -fsSL "https://nim-lang.org/download/nim-$NIM_VERSION-linux_x64.tar.xz" | tar -xJ -C "$T"
+[ -x "$T/node-v$NODE_VERSION-linux-x64/bin/node" ] || { rm -rf "$T/node-v$NODE_VERSION-linux-x64";  curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" | tar -xJ -C "$T"; }
+[ -x "$T/nim-$NIM_VERSION/bin/nim" ] || { rm -rf "$T/nim-$NIM_VERSION";  curl -fsSL "https://nim-lang.org/download/nim-$NIM_VERSION-linux_x64.tar.xz" | tar -xJ -C "$T"; }
 export PATH="$T/node-v$NODE_VERSION-linux-x64/bin:$T/nim-$NIM_VERSION/bin:$HOME/.nimble/bin:$PATH"
 command -v asar >/dev/null || npm install -g "@electron/asar@$ASAR_VERSION"
 [ -d "$HOME/.nimble/pkgs2" ] && ls "$HOME/.nimble/pkgs2" | grep -q '^regex-' || nimble install -y regex

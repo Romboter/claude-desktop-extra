@@ -9,10 +9,26 @@ $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $dist = Join-Path $repo 'dist-local'
 
 if (-not $SkipBuild) {
-  $wslRepo = (wsl wslpath -a ($repo -replace '\','/')).Trim()
+  # A snapshot of the working tree as a plain repo: WSL git cannot read a
+  # Windows git worktree's .git file, and the build needs git ls-files.
+  $snap = Join-Path $env:TEMP 'cde-snapshot'
+  Remove-Item $snap -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory $snap | Out-Null
+  # git archive gives LF content (the Windows checkout may be CRLF, which breaks bash shebangs).
+  # It exports HEAD: commit your changes first.
+  $tar = Join-Path $env:TEMP 'cde-snapshot.tar'
+  git -C $repo archive --format=tar -o $tar HEAD
+  if ($LASTEXITCODE) { throw 'git archive failed' }
+  tar -xf $tar -C $snap
+  git -C $snap init -q
+  git -C $snap add -A
+  git -C $snap -c user.name=snap -c user.email=snap@localhost commit -qm snapshot
+  $wslSnap = (wsl wslpath -a $snap.Replace([string][char]92, '/')).Trim()
   $flag = if ($SkipTests) { '--skip-tests' } else { '' }
-  wsl bash -lc "cd '$wslRepo' && scripts/windows/local-build.sh $flag"
+  wsl bash -lc "cd '$wslSnap' && scripts/windows/local-build.sh $flag"
   if ($LASTEXITCODE) { throw "build failed (exit $LASTEXITCODE)" }
+  Remove-Item $dist -Recurse -Force -ErrorAction SilentlyContinue
+  Copy-Item "$snap\dist-local" $dist -Recurse
 }
 if (-not (Get-ChildItem "$dist\*.zip" -ErrorAction SilentlyContinue)) { throw "no zip in $dist" }
 if (-not (Get-Command WindowsSandbox.exe -ErrorAction SilentlyContinue)) { throw 'Windows Sandbox is not enabled (see the header of this script)' }
