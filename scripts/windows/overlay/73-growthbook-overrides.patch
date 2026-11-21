@@ -1,0 +1,13 @@
+diff --git a/patches/core/add_growthbook_overrides.nim b/patches/core/add_growthbook_overrides.nim
+index 249923c..0fdc29d 100644
+--- a/patches/core/add_growthbook_overrides.nim
++++ b/patches/core/add_growthbook_overrides.nim
+@@ -69,7 +69,7 @@ const EXPECTED_PATCHES = 2
+ # 2 = transform call "jit(e)", 3 = e again (must equal group 1), 4 = tail
+ # ";let r=Object.keys(DS).length...loaded %d features...".
+ const SETTER_PAT =
+-  re2"""(function [\w$]+\(([\w$]+),[\w$]+\)\{[\w$]+=[\w$]+;(?:const|let|var) [\w$]+=[\w$]+;[\w$]+=)([\w$]+\(([\w$]+)\))(;(?:const|let|var) [\w$]+=Object\.keys\([\w$]+\)\.length[^"`]{0,100}[^"`]{0,100}["`]\[growthbook\] loaded %d features \(%d changed\)["`])"""
++  re2"""(function [\w$]+\(([\w$]+),[\w$]+(?:,[\w$]+=[^,(){}]+)?\)\{[\w$]+=[\w$]+(?:,[\w$]+=[\w$]+)?;(?:const|let|var) [\w$]+=[\w$]+;[\w$]+=)([\w$]+\(([\w$]+)\))(;(?:const|let|var) [\w$]+=Object\.keys\([\w$]+\)\.length[^"`]{0,100}[^"`]{0,100}["`]\[growthbook\] loaded %d features \(%d changed\)["`])"""
+ 
+ proc apply*(input: string): string =
+   result = input

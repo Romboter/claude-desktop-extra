@@ -1,0 +1,68 @@
+diff --git a/js/diff_views_main.js b/js/diff_views_main.js
+index 3214c79..93578a6 100644
+--- a/js/diff_views_main.js
++++ b/js/diff_views_main.js
+@@ -97,7 +97,7 @@
+  */
+ ;/*__CDB_DIFF_VIEWS__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   if (globalThis.__cdbDiffViewsMain) return;
+   globalThis.__cdbDiffViewsMain = true;
+ 
+@@ -719,6 +719,27 @@
+     return typeof e === "string" && e.indexOf(TRUNCATED_MARK) === 0;
+   }
+ 
++  // Windows: spawn("git") would also find a git.exe planted in the session's
++  // own folder (Windows searches the cwd before PATH). Like upstream, take
++  // git.exe only from an absolute PATH entry, resolved once.
++  var WIN = process.platform === "win32";
++  var gitBinCache;
++  function gitBin() {
++    if (!WIN) return "git";
++    if (gitBinCache !== undefined) return gitBinCache;
++    gitBinCache = null;
++    var dirs = String(process.env.PATH || process.env.Path || "").split(";");
++    for (var i = 0; i < dirs.length; i++) {
++      var d = dirs[i].replace(/^"|"$/g, "");
++      if (!d || !_path.win32.isAbsolute(d)) continue;
++      var p = _path.win32.join(d, "git.exe");
++      try { if (_fs.statSync(p).isFile()) { gitBinCache = p; break; } } catch (e) {}
++    }
++    return gitBinCache;
++  }
++  // Upstream's own Windows git calls run with repo hooks and fsmonitor off.
++  var WIN_GIT_CONFIG = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor="];
++
+   // spawn-based collector: manual cap => clean truncation semantics.
+   //
+   // git is the ONE tool of ours treated the way upstream treats it: looked up
+@@ -741,7 +762,15 @@
+     var t = globalThis.__cdbToolPath;
+     var env = Object.assign({}, (t && t.appEnv()) || process.env, extraEnv || {});
+     var child;
+-    try { child = _cp.spawn(gitCmd(), args, { cwd: cwd, env: env, stdio: ["ignore", "pipe", "pipe"] }); }
++    // WIN and gitBin live above this collector; upstream's tool-path harness
++    // runs the collector on its own, without them.
++    var win = typeof WIN !== "undefined" && WIN;
++    var bin = win ? gitBin() : gitCmd();
++    if (!bin) return cb("git.exe not found on PATH");
++    try {
++      child = _cp.spawn(bin, win ? WIN_GIT_CONFIG.concat(args) : args,
++        { cwd: cwd, env: env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
++    }
+     catch (e) { return cb(String(e && e.message || e)); }
+     var timer = setTimeout(function () { try { child.kill("SIGKILL"); } catch (e) {} }, GIT_TIMEOUT_MS);
+     child.stdout.on("data", function (d) {
+@@ -871,6 +900,9 @@
+   function isSafeRelPath(p) {
+     if (!isNonEmptyString(p)) return false;
+     if (p.charAt(0) === "-" || p.charAt(0) === "/") return false;
++    // Windows: git reports paths with "/"; a backslash or a drive letter is not
++    // a repo-relative path it produced.
++    if (process.platform === "win32" && (p.indexOf("\\") !== -1 || /^[A-Za-z]:/.test(p))) return false;
+     // A NUL cannot survive an argv element and a newline in a path is
+     // pathological; spaces are deliberately ALLOWED, because "my notes.md" is an
+     // ordinary tracked file and rejecting it would drop that one file back to the

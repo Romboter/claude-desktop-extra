@@ -1,0 +1,81 @@
+diff --git a/patches/core/fix_profile_window_title.nim b/patches/core/fix_profile_window_title.nim
+index 1f31112..85ab164 100644
+--- a/patches/core/fix_profile_window_title.nim
++++ b/patches/core/fix_profile_window_title.nim
+@@ -121,6 +121,58 @@ proc countMainWindowTitleLocks(s, factory: string): int =
+ const FACTORY_PATTERN =
+   re2"function ([\w$]+)\(([\w$]+)\)\{return ([\w$]+(?:\.[\w$]+)*)=new ([\w$]+)\.BrowserWindow\(([\w$]+)\),"
+ 
++# The per-window title injection: a short-circuit comma expression ending in
++# a comma, evaluating to `false` (no-op) when CLAUDE_PROFILE is unset.
++#
++# Upstream owns the main-window title (it preventDefaults page-title-updated;
++# up to v4.4212.0 it also called win.setTitle() on navigation). A one-shot
++# setTitle could be overwritten, so we wrap THIS window's setTitle: every
++# title, ours or upstream's, gets the suffix exactly once. Other windows keep
++# their own setTitle.
++proc titleHook(winVar: string): string =
++  "process.env.CLAUDE_PROFILE&&((globalThis." & SENTINEL &
++    "=true),((__cdb_w,__cdb_s)=>{" & "const __cdb_o=__cdb_w.setTitle.bind(__cdb_w);" &
++    "__cdb_w.setTitle=(__cdb_t)=>{__cdb_t=String(__cdb_t??\"\");" &
++    "return __cdb_o(__cdb_t.endsWith(__cdb_s)?__cdb_t:__cdb_t+__cdb_s)};" &
++    "__cdb_w.setTitle(__cdb_w.getTitle())})(" & winVar &
++    ",\" (\"+process.env.CLAUDE_PROFILE+\")\")," & POPOUT_HOOK &
++    "(\" (\"+process.env.CLAUDE_PROFILE+\")\")),"
++
++# Anthropic's Windows 6.28899 builds the main window inline, with no factory
++# function:
++#   WIN=(e=>qEe(new ELECTRON.BrowserWindow(e)))(XAr({...})), ... ,LOCK(WIN),
++# where LOCK is the page-title-updated preventDefault helper (PREVENT_HELPER).
++# Groups: 0 = WIN, 1 = the arrow's parameter, 2 = the constructor's argument
++# (must equal group 1).
++const INLINE_CTOR =
++  re2"""(?:^|[^\w$.])([\w$]+)=\(([\w$]+)=>(?:[\w$]+\()?new [\w$]+\.BrowserWindow\(([\w$]+)\)\)\)?\("""
++
++proc inlineLockSites(s: string): seq[tuple[at: int, win: string]] =
++  ## Where `LOCK(WIN),` ends, for each inline main-window construction whose
++  ## page-title-updated preventDefault helper is called on it within
++  ## PREVENT_CALL_WINDOW. Exactly one such site is the main window.
++  var helpers: seq[string]
++  for m in s.findAll(PREVENT_HELPER):
++    if s[m.group(1)] == s[m.group(2)] and s[m.group(3)] == s[m.group(4)]:
++      helpers.add s[m.group(0)]
++  if helpers.len == 0:
++    return
++  for m in s.findAll(INLINE_CTOR):
++    if s[m.group(1)] != s[m.group(2)]:
++      continue
++    let win = s[m.group(0)]
++    let a = m.boundaries.b
++    let b = min(s.len, a + PREVENT_CALL_WINDOW)
++    block found:
++      for h in helpers:
++        let needle = h & "(" & win & "),"
++        var i = s.find(needle, a)
++        while i >= 0 and i < b:
++          if i == 0 or not (isIdentChar(s[i - 1]) or s[i - 1] == '.'):
++            result.add (at: i + needle.len, win: win)
++            break found
++          i = s.find(needle, i + 1)
++
+ proc apply*(input: string): string =
+   result = input
+ 
+@@ -141,6 +193,17 @@ proc apply*(input: string): string =
+   for m in result.findAll(FACTORY_PATTERN):
+     if result[m.group(1)] == result[m.group(4)]:
+       factories.add result[m.group(0)]
++  if factories.len == 0:
++    let sites = inlineLockSites(result)
++    if sites.len != 1:
++      echo &"  [FAIL] main-window BrowserWindow factory: 0 matches, and {sites.len} inline construction sites with a title lock, expected 1"
++      raise newException(
++        ValueError, "fix_profile_window_title: main-window construction not found - re-audit"
++      )
++    echo "  [OK] upstream locks the main-window title (inline construction, 1 match)"
++    result = result[0 ..< sites[0].at] & titleHook(sites[0].win) & result[sites[0].at .. ^1]
++    echo "  [OK] Main window title hook injected (inline construction)"
++    return
+   if factories.len != 1:
+     echo &"  [FAIL] main-window BrowserWindow factory: {factories.len} matches, expected 1"
+     raise

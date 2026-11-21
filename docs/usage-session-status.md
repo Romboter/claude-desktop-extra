@@ -23,7 +23,7 @@ English and German, light and dark follow Claude.
 
 `js/usage_status_main.js` (main process) injects `js/usage_status_page.js` and `js/usage_status.css` into claude.ai pages on `dom-ready` when the key `usageStatus` is true in `claude-desktop-extra.json` (the `.jsonc` wins and locks the switch). The page script reads your plan usage with the page's own sign-in from `/api/organizations/<id>/usage`; nothing is sent anywhere else. It polls once a minute and not while the window is hidden. With the switch off, it removes everything it added. Third-party (`app://localhost`) pages are left alone.
 
-`patches/windows/add_usage_status.nim` appends the main module to `index.pre.js`; the settings row and its IPC channel (`cdb-usage-status:read` / `:set`) come from `scripts/windows/upstream-overlay.patch`. Startup logs `[usage-status] installed (main)` in `claude-patches.log`.
+`patches/windows/add_usage_status.nim` appends the main module to `index.pre.js`; the settings row and its IPC channel (`cdb-usage-status:read` / `:set`) come from `scripts/windows/overlay/20-extra-settings.patch` and `10-build-plumbing.patch`. Startup logs `[usage-status] installed (main)` in `claude-patches.log`.
 
 ## Differences from UI+
 

@@ -2,7 +2,7 @@
 /*
  * test-windows-usage-status-settings.mjs - the Extra settings side of "Usage
  * and session status": the cdb-usage-status:read / :set handlers that
- * scripts/windows/upstream-overlay.patch adds to js/extra_settings_main.js.
+ * scripts/windows/overlay/20-extra-settings.patch adds to js/extra_settings_main.js.
  * Run it on a prepared copy (scripts/windows/prepare-sources.sh DEST, then
  * node DEST/scripts/tests/windows/...): in the repo itself the handlers do not
  * exist yet and this test fails.

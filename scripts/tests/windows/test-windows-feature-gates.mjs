@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * test-windows-feature-gates.mjs - the Windows build turns on the shared
- * feature modules whose platform gate scripts/windows/upstream-overlay.patch
+ * feature modules whose platform gate scripts/windows/overlay/*.patch
  * widens to win32. Run it on a prepared copy (scripts/windows/
  * prepare-sources.sh DEST, then node DEST/scripts/tests/windows/...): in the
  * repo itself the gates are upstream's, Linux-only, and this test fails.

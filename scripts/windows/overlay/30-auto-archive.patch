@@ -1,0 +1,371 @@
+diff --git a/js/auto_archive_grace_web_main.js b/js/auto_archive_grace_web_main.js
+index da0cf33..6050928 100644
+--- a/js/auto_archive_grace_web_main.js
++++ b/js/auto_archive_grace_web_main.js
+@@ -15,9 +15,16 @@
+  */
+ ;/*__CDB_ARCHIVE_GRACE_WEB__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   if (globalThis.__cdbArchiveGraceWebMain) return;
+   globalThis.__cdbArchiveGraceWebMain = true;
++  // Windows build: one startup line for the smoke test, once the app is ready.
++  (function (app) {
++    if (!app || typeof app.whenReady !== "function") return;
++    app.whenReady().then(function () {
++      setTimeout(function () { try { (globalThis.__cdbDiag || function () {})("[archive-grace] installed (main)"); } catch (e) {} }, 0);
++    }, function () {});
++  })(require("electron").app);
+ 
+   var _electron = require("electron");
+   var _URL = require("url").URL;
+diff --git a/patches/community/add_feature_auto_archive_grace.nim b/patches/community/add_feature_auto_archive_grace.nim
+index 45c4fc1..d41c4fa 100644
+--- a/patches/community/add_feature_auto_archive_grace.nim
++++ b/patches/community/add_feature_auto_archive_grace.nim
+@@ -81,9 +81,10 @@ proc apply*(input: string): string =
+   let now = input[heads.group(1)]
+   # checkAndArchive's try-block locals: own bindings, terminal state `d` and
+   # the unconfirmed-close binding `_`. This anchor survives our own patching.
++  # Anthropic's Windows 6.28899 has one `!1` flag before that binding, not two.
+   let locals = one(
+     input,
+-    re2"""async checkAndArchive\([\w$]+,[\w$]+,[\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\?"inactive":"pr";try\{let ([\w$]+)=this\.ownPrBindings\([\w$]+\.prs\),([\w$]+)=null,[\w$]+=!1,[\w$]+=!1,([\w$]+);""",
++    re2"""async checkAndArchive\([\w$]+,[\w$]+,[\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\?"inactive":"pr";try\{let ([\w$]+)=this\.ownPrBindings\([\w$]+\.prs\),([\w$]+)=null,[\w$]+=!1,(?:[\w$]+=!1,)?([\w$]+);""",
+     "checkAndArchive locals",
+   )
+   let own = input[locals.group(0)]
+@@ -92,17 +93,17 @@ proc apply*(input: string): string =
+   let inactive = input[heads.group(2)]
+ 
+   let observe =
+-    "if(process.platform===\"linux\")await this.__cdbGrace().wait(" & session & "," &
++    "if((process.platform===\"linux\"||process.platform===\"win32\"))await this.__cdbGrace().wait(" & session & "," &
+     state & ");return"
+   let guard =
+-    "if(process.platform===\"linux\"&&!" & unconfirmed & "&&(" & state &
++    "if((process.platform===\"linux\"||process.platform===\"win32\")&&!" & unconfirmed & "&&(" & state &
+     "===\"merged\"||" & state & "===\"closed\")&&await this.__cdbGrace().wait(" & session &
+     "," & state & "))return;"
+   let lateGate =
+-    "if(process.platform===\"linux\"&&!" & inactive & "&&" & unconfirmed &
++    "if((process.platform===\"linux\"||process.platform===\"win32\")&&!" & inactive & "&&" & unconfirmed &
+     "&&await this.__cdbGrace().wait(" & session & "," & state & "))return;"
+   let shortcut =
+-    "if(process.platform===\"linux\"&&this.terminalVerdict(" & session & ".sessionId," &
++    "if((process.platform===\"linux\"||process.platform===\"win32\")&&this.terminalVerdict(" & session & ".sessionId," &
+     own & "," & now & ").terminal&&this.__cdbGrace().pending(" & session & "))return;"
+ 
+   let sweepHead = re2"async sweep\(([\w$]+)=!1\)\{"
+@@ -110,7 +111,7 @@ proc apply*(input: string): string =
+   let kicked = input[sweeps.group(0)]
+   let sweepWrapper =
+     "async sweep(" & kicked &
+-    "=!1){let __cdbOwn=process.platform===\"linux\"&&!this.sweeping;__cdbOwn&&this.__cdbGrace().begin();try{return await this.__cdbOriginalArchiveSweep(" &
++    "=!1){let __cdbOwn=(process.platform===\"linux\"||process.platform===\"win32\")&&!this.sweeping;__cdbOwn&&this.__cdbGrace().begin();try{return await this.__cdbOriginalArchiveSweep(" &
+     kicked &
+     ")}finally{__cdbOwn&&!this.sweeping&&await this.__cdbGrace().reconcileAll()}}async __cdbOriginalArchiveSweep(" &
+     kicked & "=!1){"
+@@ -121,7 +122,7 @@ proc apply*(input: string): string =
+     "confirmed-reopen",
+   )
+   let cancel =
+-    "process.platform===\"linux\"&&this.__cdbGrace().cancel(" & input[reopens.group(0)] &
++    "(process.platform===\"linux\"||process.platform===\"win32\")&&this.__cdbGrace().cancel(" & input[reopens.group(0)] &
+     ".sessionId),"
+ 
+   # What C, D, E and G sit in front of; asserted on the patched result too.
+diff --git a/patches/community/add_feature_auto_archive_grace_ion.nim b/patches/community/add_feature_auto_archive_grace_ion.nim
+index f3c4fa2..efa8d5d 100644
+--- a/patches/community/add_feature_auto_archive_grace_ion.nim
++++ b/patches/community/add_feature_auto_archive_grace_ion.nim
+@@ -22,7 +22,7 @@
+ # notice chunk's import list, and that export to the rail chunk's own local
+ # name through the rail chunk's import list; the rail's own `aside` call must
+ # use the same jsxs.
+-import std/[os, strutils, tables]
++import std/[os, sequtils, strutils, tables]
+ import regex
+ 
+ const source = staticRead("../../js/auto_archive_grace_ui.js")
+@@ -62,10 +62,59 @@ type Aliases = object
+   vendor: string
+   exports: array[5, string] # in `placeholders` order
+ 
+-proc resolveAliases(notice: string): Aliases =
++# The vendor-frame bundle's export names for the jsx-runtime's Fragment, jsx and
++# jsxs. The runtime binds them next to each other, on one object:
++#   le=ce.Fragment,q=ce.jsx,ue=ce.jsxs
++# and the bundle's `export{le as Ba,...}` clause renames them. Minified inner
++# names repeat across scopes, so only this triple (not a lone `x=y.Fragment`)
++# identifies them.
++type RuntimeExports = object
++  fragment, jsx, jsxs: string
++
++proc jsxRuntimeExports(vendor: string): RuntimeExports =
++  let triple = vendor.findAll(
++    re2"""([\w$]+)=([\w$]+)\.Fragment,([\w$]+)=([\w$]+)\.jsx,([\w$]+)=([\w$]+)\.jsxs[,;]"""
++  )
++  if triple.len != 1 or vendor[triple[0].group(1)] != vendor[triple[0].group(3)] or
++      vendor[triple[0].group(1)] != vendor[triple[0].group(5)]:
++    raise newException(ValueError, "vendor-frame: jsx-runtime bindings not found")
++  let clause = vendor.findAll(re2"""export\{([^}]+)\}""")
++  if clause.len != 1:
++    raise newException(ValueError, "vendor-frame: expected one export clause")
++  var exported: Table[string, string] # internal name -> export name
++  for entry in vendor[clause[0].group(0)].split(','):
++    let parts = entry.split(" as ")
++    if parts.len == 2:
++      exported[parts[0]] = parts[1]
++  for (internal, role) in [
++    (vendor[triple[0].group(0)], 0),
++    (vendor[triple[0].group(2)], 1),
++    (vendor[triple[0].group(4)], 2),
++  ]:
++    if internal notin exported:
++      raise newException(ValueError, "vendor-frame: " & internal & " is not exported")
++    case role
++    of 0:
++      result.fragment = exported[internal]
++    of 1:
++      result.jsx = exported[internal]
++    else:
++      result.jsxs = exported[internal]
++
++proc resolveAliases(notice, assetsDir: string): Aliases =
++  # Anthropic's Windows 6.28899 shape: the subscriber is memoised by the React
++  # compiler's cache and registers through a helper instead of
++  # onPreferencesChanged:
++  #   [t,n]=N(),r,i;return J1($,0,e)?(r=()=>{if(!e)return;let t=e=>{n(e.ccAutoArchiveOnPrClose===!0)};
++  #   return ...},i=[e],K2($,0,e,r,i)):(r=$[1],i=$[2]),S(r,i),t}
++  let subscriberCompiled =
++    re2"""\[[\w$]+,[\w$]+\]=([\w$]+)\(\),[\w$]+,[\w$]+;return [\w$]+\([\w$]+,\d+,[\w$]+\)\?\([\w$]+=\(\)=>\{if\(![\w$]+\)return;let [\w$]+=[\w$]+=>\{[\w$]+\([\w$]+\.ccAutoArchiveOnPrClose===!0\)\};return [^;]*?\},[\w$]+=\[[\w$]+\],[\w$]+\([^;]*?\)\):\([^;]*?\),([\w$]+)\([\w$]+,[\w$]+\),[\w$]+\}"""
+   let subscriber = unique(
+     notice,
+-    re2"""\[[\w$]+,[\w$]+\]=([\w$]+)\(\),[^;]*;return [^;]*;let [^;]*?ccAutoArchiveOnPrClose===!0\)\};return [^;]*?onPreferencesChanged[^;]*?,([\w$]+)\([\w$]+,[\w$]+\),[\w$]+\}""",
++    if notice.findAll(subscriberCompiled).len == 1:
++      subscriberCompiled
++    else:
++      re2"""\[[\w$]+,[\w$]+\]=([\w$]+)\(\),[^;]*;return [^;]*;let [^;]*?ccAutoArchiveOnPrClose===!0\)\};return [^;]*?onPreferencesChanged[^;]*?,([\w$]+)\([\w$]+,[\w$]+\),[\w$]+\}""",
+     "preference subscriber",
+   )
+   let jsx = unique(
+@@ -73,19 +122,45 @@ proc resolveAliases(notice: string): Aliases =
+     re2"""([\w$]+)\("div",\{role:"status","aria-live":"polite","data-find-omitted":"",className:""",
+     "notice jsx",
+   )
+-  let fragment = unique(
+-    notice,
+-    re2"""function [\w$]+\([\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\(\d+\),\{repoKey:[\w$]+,sessionRef:[\w$]+,sessionRepo:[\w$]+,isPrimary:[\w$]+,[\s\S]*?([\w$]+)\(([\w$]+),\{children:\[[\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+\]\}\)\):[\w$]+\[\d+\]\}""",
+-    "PR bar row fragment",
++  let imports = vendorImports(notice)
++  # jsxs and Fragment. Up to 5.11492 they were read off the PR bar row's closing
++  # fragment (a `function X(a,b){...{repoKey:..}...}` component). In Anthropic's
++  # Windows 6.28899 that row lives in another chunk and this chunk holds several
++  # six-child jsxs calls (one is a ViewTransition, not a Fragment), so each
++  # candidate is checked against the vendor-frame bundle's jsx-runtime exports.
++  var jsxsLocal, fragmentLocal: string
++  let prBarRow = notice.findAll(
++    re2"""function [\w$]+\([\w$]+,[\w$]+\)\{let [\w$]+=[\w$]+\(\d+\),\{repoKey:[\w$]+,sessionRef:[\w$]+,sessionRepo:[\w$]+,isPrimary:[\w$]+,[\s\S]*?([\w$]+)\(([\w$]+),\{children:\[[\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+\]\}\)\):[\w$]+\[\d+\]\}"""
+   )
++  if prBarRow.len == 1:
++    jsxsLocal = notice[prBarRow[0].group(0)]
++    fragmentLocal = notice[prBarRow[0].group(1)]
++  else:
++    let runtime = jsxRuntimeExports(readFile(assetsDir / imports.file))
++    var pairs: seq[(string, string)]
++    for m in notice.findAll(
++      re2"""([\w$]+)\(([\w$]+),\{children:\[[\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+\]\}\)\):[\w$]+\[\d+\]\}"""
++    ):
++      let jsxsName = notice[m.group(0)]
++      let fragName = notice[m.group(1)]
++      if jsxsName in imports.byLocal and fragName in imports.byLocal and
++          imports.byLocal[jsxsName] == runtime.jsxs and
++          imports.byLocal[fragName] == runtime.fragment:
++        pairs.add (jsxsName, fragName)
++    pairs = pairs.deduplicate
++    if pairs.len != 1:
++      raise newException(
++        ValueError, "jsxs/Fragment: expected one verified pair, got " & $pairs.len
++      )
++    jsxsLocal = pairs[0][0]
++    fragmentLocal = pairs[0][1]
+   let locals = [
+     notice[subscriber.group(0)],
+     notice[subscriber.group(1)],
+     notice[jsx.group(0)],
+-    notice[fragment.group(0)],
+-    notice[fragment.group(1)],
++    jsxsLocal,
++    fragmentLocal,
+   ]
+-  let imports = vendorImports(notice)
+   result.vendor = imports.file
+   for i, local in locals:
+     if local notin imports.byLocal:
+@@ -234,7 +309,7 @@ when isMainModule:
+     # original text and must re-apply byte-identically.
+     let noticeOriginal = restoreNotice(noticeInput)
+     let railOriginal = restoreRail(railInput)
+-    let aliases = resolveAliases(noticeOriginal)
++    let aliases = resolveAliases(noticeOriginal, paramStr(1) / "assets" / "v1")
+     let noticeOutput = applyNotice(noticeOriginal, aliases)
+     let railOutput = applyRail(railOriginal, aliases)
+     if (marker in noticeInput and noticeOutput != noticeInput) or
+@@ -242,6 +317,7 @@ when isMainModule:
+       raise newException(ValueError, "injection incomplete or stale")
+     writeFile(noticePath, noticeOutput)
+     writeFile(railPath, railOutput)
+-  except ValueError as e:
++  except CatchableError as e:
++    # ValueError from an anchor, or an IOError reading the vendor-frame bundle.
+     quit("[FAIL] archive grace UI: " & e.msg, 1)
+   echo "[OK] archive grace UI: notice and session rail verified"
+diff --git a/scripts/tests/community/test-auto-archive-grace.mjs b/scripts/tests/community/test-auto-archive-grace.mjs
+index 71097b7..5574c9c 100644
+--- a/scripts/tests/community/test-auto-archive-grace.mjs
++++ b/scripts/tests/community/test-auto-archive-grace.mjs
+@@ -217,7 +217,7 @@ await test("injected: a null lookup between sweeps keeps the deadline, OPEN clea
+   b.clock.now += 10 * 60000; b.engine.state = "open"; await b.check();
+   b.clock.now += 10 * 60000; b.engine.state = "merged"; assert.equal(await b.check(), "lookup", "after OPEN a re-merge starts a fresh grace");
+ });
+-await test("injected: confirmed reopen cancels the old clock and a stale CLOSED gets a fresh grace; inactivity, win32, immediate unchanged", async () => {
++await test("injected: confirmed reopen cancels the old clock and a stale CLOSED gets a fresh grace; inactivity, darwin, immediate unchanged; win32 holds like linux (Windows build)", async () => {
+   const { h, engine, clock, context, check } = patchedEngine();
+   assert.equal(await check(), "");
+   clock.now += 14 * 60000; engine.freshReopen(h.session, [{}]); h.session.prs[0].state = "CLOSED";
+@@ -225,14 +225,15 @@ await test("injected: confirmed reopen cancels the old clock and a stale CLOSED
+   assert.equal(await check(), "", "the CLOSED binding got its own new grace");
+   assert.equal(await check(true), "inspect,archive", "inactivity is unchanged");
+   await engine.sweep(); assert.equal(engine.calls.includes("sweep"), true);
+-  context.process.platform = "win32"; assert.equal(await check(), "share,remembered,inspect,archive");
++  context.process.platform = "win32"; assert.equal(await check(), "", "win32 holds like linux");
++  context.process.platform = "darwin"; assert.equal(await check(), "share,remembered,inspect,archive");
+   const zero = patchedEngine(0); assert.equal(await zero.check(), "share,remembered,inspect,archive", "immediate is upstream");
+ });
+ 
+ await test("settings IPC: default, persistence, jsonc lock, validation and untouched unrelated preferences", async () => {
+   const extra = path.join(ROOT, "patches/core/add_feature_extra_settings"); fs.accessSync(extra, fs.constants.X_OK);
+   const require2 = createRequire(import.meta.url), Module = require2("module");
+-  for (const platform of ["linux", "win32"]) {
++  for (const platform of ["linux", "win32"]) { // extra_settings_main never loads on darwin; win32 works like linux (Windows build)
+     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cdb-grace-settings-")), file = path.join(dir, "extra.cjs");
+     try {
+       fs.writeFileSync(file, 'function FHa(e=[]){let t=G().type==="3p"&&ou()==="1p"?[...e,j$t]:e;a.app.isPackaged?Mj(!0,t):fj(t)}\n' + 'var Hrr,Urr;function Yrr(){return Urr??=(async()=>{let t,n,r,s;return Hrr={qemuPath:t,firmwarePath:n,virtiofsdPath:r,virtiofsdAptInstallable:!0,kvm:s},Hrr})(),Urr}function Xrr(){return Hrr}\n' + 'function nav0(){let Uy=go(Hy,"Navigation",Xy,{events:[["navigate",[["path",I]]]]});return Uy}\n');
+@@ -246,7 +247,6 @@ await test("settings IPC: default, persistence, jsonc lock, validation and untou
+       try { require2(file); } finally { Module._load = original; Object.defineProperty(process, "platform", descriptor); }
+       const event = { sender: { isDestroyed: () => false, getURL: () => "https://claude.ai/settings" }, senderFrame: { parent: null } };
+       const call = (channel, ...args) => handlers["cdb-archive-grace:" + channel](event, ...args);
+-      if (platform === "win32") { assert.equal((await call("set", 15)).ok, false); assert.equal(globalThis.__cdbAutoArchiveMergeDelayMinutes, undefined); continue; }
+       assert.equal((await call("read")).minutes, 0);
+       const json = path.join(userData, "claude-desktop-extra.json"), jsonc = path.join(userData, "claude-desktop-extra.jsonc");
+       const unrelated = { autoFixTrustedAuthors: ["github.com/my-app[bot]"], other: true };
+@@ -295,16 +295,19 @@ const railFixture = [
+   'import{Ga as o,Ka as c,Wa as u,To as l,go as h}from"./vendor-frame-test.js";',
+   'function Side(e){let $=Q7(124),{session:t,pullRequests:n,plan:r,artifacts:i,repoMenuItems:a,outputsSession:s,controls:k}=e;let x=o(Vb,{id:"environment",title:"Environment"}),z=o(Vb,{id:"pullRequests",title:"Changes"});if(!t)return null;let je="header",We="content";return J4($,118,ke,Ae,je,We)?K4($,118,ke,Ae,je,We,c("aside",{ref:De,"aria-label":ke,tabIndex:-1,onMouseDownCapture:Km,onClickCapture:Km,onDoubleClickCapture:Km,className:Ae,children:[je,We]})):$[122]}function After(){}'
+ ].join("\n");
+-function runIon(notice, rail) {
++// `extra` stages more assets next to the chunks ({ "vendor-frame-x.js": text|Buffer }):
++// the resolver reads the vendor-frame bundle when the PR bar row anchor is gone.
++function runIon(notice, rail, extra = {}) {
+   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cdb-grace-ion-")), assets = path.join(dir, "assets/v1");
+   fs.mkdirSync(assets, { recursive: true });
+   const noticeFile = path.join(assets, "notice.js"), railFile = path.join(assets, "rail.js");
+   fs.writeFileSync(noticeFile, notice); fs.writeFileSync(railFile, rail);
++  for (const [name, body] of Object.entries(extra)) fs.writeFileSync(path.join(assets, name), body);
+   const run = spawnSync(ionBinary, [dir], { encoding: "utf8" });
+   return { dir, noticeFile, railFile, run };
+ }
+-function checkIon(notice, rail) {
+-  const first = runIon(notice, rail);
++function checkIon(notice, rail, extra = {}) {
++  const first = runIon(notice, rail, extra);
+   try {
+     assert.equal(first.run.status, 0, first.run.stdout + first.run.stderr);
+     for (const file of [first.noticeFile, first.railFile]) execFileSync(process.execPath, ["--check", file]);
+@@ -329,7 +332,8 @@ await test("ion patch: applies to upstream's shapes with renamed aliases and slo
+ await test("ion patch: fails closed on changed anchors, a missing chunk and a stale injection", async () => {
+   const out = checkIon(noticeFixture, railFixture);
+   const broken = [
+-    [noticeFixture.replace("onPreferencesChanged", "onPrefs"), railFixture],
++    // The subscriber resolver keys on the preference callback reading the flag.
++    [noticeFixture.replace("ccAutoArchiveOnPrClose===!0", "ccAutoArchiveOnPrClose===1"), railFixture],
+     [noticeFixture.replace("{hold:t,sessionRef:n}", "{reason:t,sessionRef:n}"), railFixture],
+     [noticeFixture.replace("isPrimary:a", "primary:a"), railFixture],
+     [noticeFixture.replace("Ka as jxs", "Ka as jxz"), railFixture],
+@@ -349,6 +353,30 @@ await test("ion patch: fails closed on changed anchors, a missing chunk and a st
+     finally { fs.rmSync(r.dir, { recursive: true, force: true }); }
+   }
+ });
++// Anthropic's Windows 6.28899 shape: the preference callback registers through a
++// helper (no onPreferencesChanged), and the notice chunk has no PR bar row, so
++// jsxs / Fragment are verified against the vendor-frame jsx-runtime exports. A
++// second six-child jsxs call whose first argument is NOT the Fragment export (a
++// ViewTransition) must not be taken for it.
++const vendorFixture = "var ce={},le=ce.Fragment,q=ce.jsx,ue=ce.jsxs;export{le as Wa,q as Ga,ue as Ka,vt as Ba,x as To,y as go};";
++const windowsNotice = noticeFixture
++  .replace("Zn?.onPreferencesChanged?.(t)", "Ki(t)")
++  .replace("go as eff,", "go as eff,Ba as ViewT,")
++  .replace(/function Row\(e,t\)\{let \$=Q7\(441\),\{repoKey:n,sessionRef:r,sessionRepo:i,isPrimary:a,inRail:D\}=e;/,
++    "var Row=memo(function(e){let $=Q7(441),{item:n}=e;")
++  .replace("$[440]}", "$[440]})")
++  .concat("\nfunction Decoy(e){return J5($,75,u,d)?K5($,75,u,d,jxs(ViewT,{children:[u,d,c,p,m,g]})):$[81]}");
++await test("ion patch: Windows shapes - helper-registered subscriber, jsxs/Fragment from the vendor-frame runtime, not the ViewTransition decoy", async () => {
++  const extra = { "vendor-frame-test.js": vendorFixture };
++  const out = checkIon(windowsNotice, railFixture, extra);
++  for (const alias of ["= st(null)", "eff(() =>", "jxs(Frag, {children:"]) assert.ok(out.notice.includes(alias), "notice helper uses " + alias);
++  const noVendor = runIon(windowsNotice, railFixture);
++  try { assert.notEqual(noVendor.run.status, 0, "the vendor bundle is required on this path"); assert.match(noVendor.run.stdout + noVendor.run.stderr, /\[FAIL\]/); }
++  finally { fs.rmSync(noVendor.dir, { recursive: true, force: true }); }
++  const wrongExport = runIon(windowsNotice, railFixture, { "vendor-frame-test.js": vendorFixture.replace("le as Wa", "le as Zz") });
++  try { assert.notEqual(wrongExport.run.status, 0, "Fragment no longer exported under the imported name"); assert.match(wrongExport.run.stdout + wrongExport.run.stderr, /\[FAIL\]/); }
++  finally { fs.rmSync(wrongExport.dir, { recursive: true, force: true }); }
++});
+ await test("ion wrappers: the keep control is appended inside the rail's aside, ref/key kept; the notice wrapper passes hold and class", async () => {
+   const out = checkIon(noticeFixture, railFixture);
+   const ctx = { o: (type, props, key) => ({ type, props, key: key ?? null }), c: (type, props, key) => ({ type, props, key: key ?? null }),
+@@ -386,6 +414,7 @@ function readAsarChunks(file) {
+       const buf = Buffer.alloc(entry.size); fs.readSync(fd, buf, 0, entry.size, base + Number(entry.offset));
+       if (buf.includes(ION_TARGET)) found.notice = { name, buf };
+       if (isRailChunk(buf)) found.rail = { name, buf };
++      if (/^vendor-frame-.*\.js$/.test(name)) found.vendor = { name, buf };
+     }
+   } finally { fs.closeSync(fd); }
+   return found;
+@@ -401,6 +430,7 @@ function pristineIonChunks() {
+       const buf = fs.readFileSync(path.join(assets, name));
+       if (buf.includes(ION_TARGET)) found.notice = { name, buf };
+       if (isRailChunk(buf)) found.rail = { name, buf };
++      if (/^vendor-frame-.*\.js$/.test(name)) found.vendor = { name, buf };
+     }
+     return found;
+   }
+@@ -411,7 +441,9 @@ function pristineIonChunks() {
+   if (!real || !real.notice || !real.rail) console.log("SKIP ion patch on the real chunks: " + (real ? "target chunks not found in " + real.from : "no pristine ion-dist (set CDB_ION_DIST or extract to tmp/extract)"));
+   else if (real.notice.buf.includes("__cdb") || real.rail.buf.includes("__cdb")) console.log("SKIP ion patch on the real chunks: " + real.from + " is already patched");
+   else await test(`ion patch: applies to the real pristine chunks (${real.notice.name}, ${real.rail.name}), node --check, idempotent`, async () => {
+-    const out = checkIon(real.notice.buf, real.rail.buf);
++    // The resolver reads the vendor-frame bundle on shapes without the PR bar row:
++    // stage it under its real name, beside the chunks.
++    const out = checkIon(real.notice.buf, real.rail.buf, real.vendor ? { [real.vendor.name]: real.vendor.buf } : {});
+     for (const text of [out.notice, out.rail]) assert.equal(text.split("/*cdb-archive-grace-ui*/").length, 2);
+     assert.ok(out.notice.includes("function __cdbArchiveNativeNotice(") && out.rail.includes("function __cdbArchiveNativeRail("));
+   });
+@@ -564,14 +596,14 @@ const webMainSource = () => {
+ };
+ await test("web main: runs the page script on dom-ready in claude.ai pages only, linux only; refresh re-runs it", async () => {
+   const code = webMainSource();
+-  for (const platform of ["linux", "win32"]) {
++  for (const platform of ["linux", "win32", "darwin"]) {
+     let created = null; const all = [];
+     const wc = url => { const c = { url, ran: [], handlers: {}, isDestroyed: () => false, getURL() { return c.url; },
+       on(ev, fn) { c.handlers[ev] = fn; }, executeJavaScript(src) { c.ran.push(src); return Promise.resolve(); } }; all.push(c); return c; };
+     const electron = { app: { on: (ev, fn) => { if (ev === "web-contents-created") created = fn; } }, webContents: { getAllWebContents: () => all } };
+     const g = { process: { platform }, require: id => id === "electron" ? electron : require2(id) };
+     g.globalThis = g; vm.runInNewContext(code, g);
+-    if (platform === "win32") { assert.equal(created, null); assert.equal(g.__cdbArchiveGraceWebRefresh, undefined); continue; }
++    if (platform === "darwin") { assert.equal(created, null); assert.equal(g.__cdbArchiveGraceWebRefresh, undefined); continue; }
+     const pages = ["https://claude.ai/epitaxy/x", "https://preview.claude.ai/", "app://localhost/epitaxy", "https://claude.ai.evil.example/", "http://claude.ai/"].map(wc);
+     for (const p of pages) { created({}, p); p.handlers["dom-ready"](); }
+     assert.deepEqual(pages.map(p => p.ran.length), [1, 1, 0, 0, 0]);

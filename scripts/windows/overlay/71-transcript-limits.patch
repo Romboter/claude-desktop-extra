@@ -1,0 +1,41 @@
+diff --git a/js/transcript_limits_main.js b/js/transcript_limits_main.js
+index 7f8b2ec..e944ca0 100644
+--- a/js/transcript_limits_main.js
++++ b/js/transcript_limits_main.js
+@@ -54,7 +54,7 @@
+  */
+ ;/*__CDB_TRANSCRIPT_LIMITS__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   if (globalThis.__cdbTranscriptLimitsMain) return;
+   globalThis.__cdbTranscriptLimitsMain = true;
+ 
+diff --git a/patches/community/add_feature_transcript_limits.nim b/patches/community/add_feature_transcript_limits.nim
+index bbfc05a..4798107 100644
+--- a/patches/community/add_feature_transcript_limits.nim
++++ b/patches/community/add_feature_transcript_limits.nim
+@@ -142,9 +142,11 @@ proc apply*(input: string): string =
+   # --- precondition P: upstream still reads the loadLimits option ---------------
+   # Without it C would "succeed" into an option nothing reads (see the header).
+   let (ctorReads, configReads) = limitsReadCounts(result)
+-  if ctorReads != 1 or configReads != 1:
++  # Anthropic's Windows 6.28899 reads `this.config.loadLimits` twice (the
++  # truncation prediction and searchLeftFile's mainBytes), so one (Linux) or two (Windows) are the audited layouts.
++  if ctorReads != 1 or configReads notin [1, 2]:
+     echo "  [FAIL] transcript limits: expected upstream to read loadLimits at exactly 1 " &
+-      "`new <Reader>(<cfg>.loadLimits)` and 1 `this.config.loadLimits`, found " &
++      "`new <Reader>(<cfg>.loadLimits)` and 1 or 2 `this.config.loadLimits`, found " &
+       $ctorReads & " and " & $configReads & " - the option was renamed or its reads " &
+       "moved, so passing it would change nothing; re-audit before re-fitting C"
+     quit(1)
+@@ -199,7 +201,8 @@ when isMainModule:
+     echo "  [PASS] transcript limits applied"
+   else:
+     if MARKER notin output or forkEndStateCount(output) != 1 or
+-        limitsReadCounts(output) != (1, 1) or ctorEndStateCount(output) != CTOR_SITES:
++        limitsReadCounts(output)[0] != 1 or limitsReadCounts(output)[1] notin [1, 2] or
++        ctorEndStateCount(output) != CTOR_SITES:
+       echo "  [FAIL] No changes made and the end-state is absent"
+       quit(1)
+     echo "  [OK] Already applied (no changes needed)"
