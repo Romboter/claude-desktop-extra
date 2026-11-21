@@ -103,6 +103,25 @@ Needs Node 24+, Nim with the `regex` package, `asar` (or `npx`), `curl`, `unzip`
 
 The Windows version stream is not the Linux one (Windows usually ships first), so a Windows build can meet a bundle the patches were not yet re-fitted to; the build then fails like a Linux build would.
 
+## Build and test locally
+
+`scripts/windows/local-test.ps1` repeats the CI x64 build and smoke test on one Windows machine: it builds in WSL, then installs and boots the zip in Windows Sandbox.
+
+One-time setup:
+
+- WSL with Ubuntu, plus `sudo apt-get install -y build-essential zip unzip python3 xz-utils curl git`.
+- Windows Sandbox (Windows 11 Pro). From an elevated PowerShell: `Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM`, then reboot.
+
+```powershell
+.\scripts\windows\local-test.ps1              # build (with the feature harnesses) + smoke test
+.\scripts\windows\local-test.ps1 -SkipTests   # skip the harnesses
+.\scripts\windows\local-test.ps1 -SkipBuild   # reuse dist-local\, only boot it in the Sandbox
+```
+
+It builds from `git archive HEAD` (LF endings, a plain repo with your `origin`), so commit first; uncommitted edits are not built. The build takes about 3 minutes, mostly downloading Anthropic's package; the Sandbox boot about 1 more. The result is `dist-local\`, and the Sandbox's `claude-patches.log` is printed. It prints PASS or FAIL.
+
+Limits: x64 only (no arm64), and the startup-line list in `scripts/windows/smoke-test.ps1` is a copy of the one in `build-windows.yml`; keep them in step. The feature harnesses have not been confirmed to run locally.
+
 ## Staying in sync with upstream
 
 This fork follows [patrickjaja/claude-desktop-extra](https://github.com/patrickjaja/claude-desktop-extra), which ships the Linux packages.
