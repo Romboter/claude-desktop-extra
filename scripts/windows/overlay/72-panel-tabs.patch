@@ -1,0 +1,13 @@
+diff --git a/js/panel_tabs_main.js b/js/panel_tabs_main.js
+index ddd96fb..4701d1d 100644
+--- a/js/panel_tabs_main.js
++++ b/js/panel_tabs_main.js
+@@ -13,7 +13,7 @@
+  */
+ ;/*__CDB_PANEL_TABS__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   if (globalThis.__cdbPanelTabsMain) return;
+   globalThis.__cdbPanelTabsMain = true;
+ 

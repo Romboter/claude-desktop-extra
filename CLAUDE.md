@@ -10,12 +10,12 @@ The owner keeps a single open Claude Code thread (session) for this repository. 
 
 ## Rule: never edit upstream files in place
 
-The fork only ADDS files. That is what keeps the scheduled sync with upstream (`.github/workflows/upstream-sync.yml`, GitHub's "Sync fork") conflict-free. A change the Windows build needs in an upstream file goes into `scripts/windows/upstream-overlay.patch`, which `scripts/windows/prepare-sources.sh` applies to a temp copy at build time:
+The fork only ADDS files. That is what keeps the scheduled sync with upstream (`.github/workflows/upstream-sync.yml`, GitHub's "Sync fork") conflict-free. A change the Windows build needs in an upstream file goes into a patch in `scripts/windows/overlay/`, which `scripts/windows/prepare-sources.sh` applies to a temp copy at build time:
 
 ```bash
 scripts/windows/prepare-sources.sh /tmp/src     # copy + overlay
 # edit files under /tmp/src
-git -C /tmp/src diff > scripts/windows/upstream-overlay.patch
+scripts/windows/regen-overlay.sh /tmp/src       # rewrites overlay/*.patch; group() map says which patch a file is in
 ```
 
 Check before committing: `git diff --diff-filter=M upstream/master...HEAD --stat` must list nothing except files under `.github/workflows/` (the fork edits or deletes upstream's Linux workflows on purpose, and the sync step keeps the fork's version on a conflict there) (fetch `https://github.com/patrickjaja/claude-desktop-extra` as `upstream`). Fork docs go in docs/windows.md, docs/windows-troubleshooting.md or this file, not in README.md / CHANGELOG.md / AGENTS.md.
@@ -25,7 +25,7 @@ Check before committing: `git diff --diff-filter=M upstream/master...HEAD --stat
 | Path | What |
 |---|---|
 | `scripts/windows/build-windows.sh` | Download + verify the official Windows `.nupkg`, run the absorption probe on the Windows set, patch, repack, rewrite the asar integrity records in `claude.exe`, zip |
-| `scripts/windows/prepare-sources.sh`, `scripts/windows/upstream-overlay.patch` | The fork's edits to upstream files, applied at build time |
+| `scripts/windows/prepare-sources.sh`, `scripts/windows/regen-overlay.sh`, `scripts/windows/overlay/*.patch` | The fork's edits to upstream files, applied at build time |
 | `scripts/windows/patch-check.py` | Quick "do the patches still fit?" loop: pulls Anthropic's Windows `.nupkg` (SHA1-checked), a `.deb`, or an extracted folder, builds the overlaid sources, applies the patch set and names the failures. Runs on Windows, Linux and macOS; packages nothing |
 | `scripts/windows/asar_integrity.py` | asar header hash, fuses, the exe integrity record (Windows enforces it; Linux does not) |
 | `patches/windows/add_windows_profiles.nim`, `js/windows_profiles_main.js` | `--profile=NAME` and sign-in callback routing, injected into `index.pre.js` |

@@ -5,7 +5,7 @@ A portable Windows build of Anthropic's official Claude Desktop with this projec
 - **Profiles**: several separate Claude instances side by side, each with its own sign-in, settings and Claude Code configuration.
 - **Settings → Extra**, with these panels:
   - **Themes**: the [theme engine](themes.md), its bundled palettes and the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker.
-  - **Community**: the opt-in features. They are diff view modes, panel tabs and files quick open (<kbd>Ctrl</kbd>+<kbd>P</kbd>) in the [Code tab](code-tab.md); load large sessions in full; allow non-Anthropic models (3P gateways); the theme picker; developer tools; the [Jira issue tracker](jira-tracker.md) (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd>); and the [auto-archive delay](auto-archive-grace.md) after a PR merges or closes.
+  - **Community**: the opt-in features. They are diff view modes, panel tabs and files quick open (<kbd>Ctrl</kbd>+<kbd>P</kbd>) in the [Code tab](code-tab.md); load large sessions in full; allow non-Anthropic models (3P gateways); the theme picker; developer tools; the [Jira issue tracker](jira-tracker.md) (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd>); [usage and session status](usage-session-status.md); and the [auto-archive delay](auto-archive-grace.md) after a PR merges or closes.
   - **Models**: [custom models](custom-models.md) from other providers in the Code tab's picker.
   - **Anthropic**: [feature flag overrides](feature-flags.md).
 
@@ -86,7 +86,7 @@ Save hand-edited files as **UTF-8 without a byte-order mark**: Notepad's default
 `scripts/windows/build-windows.sh` runs on Linux, like the other packages:
 
 1. Reads `https://downloads.claude.ai/releases/win32/<arch>/RELEASES` (what the official installer reads), downloads the full Squirrel `.nupkg` and checks its size and SHA1 against it.
-2. Prepares the sources: `scripts/windows/prepare-sources.sh` copies the repo to a temp folder and applies `scripts/windows/upstream-overlay.patch` there (see [Staying in sync with upstream](#staying-in-sync-with-upstream)).
+2. Prepares the sources: `scripts/windows/prepare-sources.sh` copies the repo to a temp folder and applies the per-feature patches in `scripts/windows/overlay/` there, in name order (see [Staying in sync with upstream](#staying-in-sync-with-upstream)).
 3. Extracts `app.asar` and the 3P setup window, and runs upstream's absorption probe (`scripts/check-upstream-absorbed.py`) on the pristine files over the Windows patch set only: a patch that changes nothing there means Anthropic now ships that feature on Windows itself, and the build fails until it is audited and taken out of `WINDOWS_PATCH_SET` (AGENTS.md Rule 4). Then it applies the Windows patch set from that copy:
    - `apply_patches.py --windows` runs the shared patches listed in `WINDOWS_PATCH_SET` (every core and community feature except the Linux window handling, the Quick Entry socket and the Linux profile URL routing), then everything in `patches/windows/`;
    - the allow-non-Anthropic-models patch of the 3P setup window runs on its files: since v4.29.0 they ship as `resources/ion-dist.asar`, which is extracted, patched and repacked to its place (older packages have a `resources/ion-dist` folder, patched in place). The strictness rules are the same as on Linux: a patch that does not match fails the build, and so does a layout that is neither of the two.
@@ -126,7 +126,7 @@ Limits: x64 only (no arm64), and the startup-line list in `scripts/windows/smoke
 
 This fork follows [patrickjaja/claude-desktop-extra](https://github.com/patrickjaja/claude-desktop-extra), which ships the Linux packages.
 
-- **The fork only adds files.** Its few edits to upstream files are kept in `scripts/windows/upstream-overlay.patch` and applied to a copy at build time, never committed in place:
+- **The fork only adds files.** Its few edits to upstream files are kept as per-feature patches in `scripts/windows/overlay/` (`10-build-plumbing` to `74-profile-window-title`) and applied to a copy at build time, never committed in place:
   - the `win32` gates of the shipped features;
   - the Windows Settings → Extra nav and Community list (`js/extra_settings_page.js`);
   - Windows fixes:
@@ -140,7 +140,7 @@ This fork follows [patrickjaja/claude-desktop-extra](https://github.com/patrickj
 
   Custom models need no overlay any more: upstream took the fork's Windows changes for them (the `win32` gate and the 8.3 short path in [patrickjaja/claude-desktop-extra#295](https://github.com/patrickjaja/claude-desktop-extra/pull/295), the router accepting `claude.exe` in [#296](https://github.com/patrickjaja/claude-desktop-extra/pull/296)).
 
-  So syncing master with upstream never conflicts. If upstream rewrites one of those lines, `prepare-sources.sh` fails loudly instead.
+  So syncing master with upstream never conflicts. If upstream rewrites one of those lines, `prepare-sources.sh` fails loudly instead, naming the patch.
 - **Automation:** the **Upstream Sync** workflow (`.github/workflows/upstream-sync.yml`) runs every 2 hours (at minute 51):
   1. looks for an open "Automatic update failed" issue (see the pause below);
   2. syncs master with GitHub's "Sync fork";
@@ -156,7 +156,7 @@ This fork follows [patrickjaja/claude-desktop-extra](https://github.com/patrickj
 - **Changing the overlay:**
   1. run `scripts/windows/prepare-sources.sh /tmp/src`;
   2. edit the files in `/tmp/src`;
-  3. run `git -C /tmp/src diff > scripts/windows/upstream-overlay.patch`.
+  3. run `scripts/windows/regen-overlay.sh /tmp/src`. A new modified file must be added to its `group()` map, or the script fails.
 
 ## Release safeguards
 

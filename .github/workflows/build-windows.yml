@@ -2,7 +2,7 @@ name: "Windows: Build & Publish"
 
 # The portable Windows 11 build (docs/windows.md): Anthropic's official Windows
 # package, patched with the Windows patch set (apply_patches.py --windows on a
-# copy of the sources with scripts/windows/upstream-overlay.patch applied),
+# copy of the sources with scripts/windows/overlay/*.patch applied),
 # integrity hash rewritten, zipped with an installer script.
 #
 # Runs on PRs that touch the Windows build, by hand, and from the scheduled
@@ -194,7 +194,8 @@ jobs:
             '[transcript-limits] installed (main)',
             '[cdb-jira] installed; switch',
             '[archive-grace] installed (main)',
-            '[win-update] armed'
+            '[win-update] armed',
+            '[usage-status] installed (main)'
           )
           do {
             Start-Sleep -Seconds 5

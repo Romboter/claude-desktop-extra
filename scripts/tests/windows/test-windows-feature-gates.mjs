@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * test-windows-feature-gates.mjs - the Windows build turns on the shared
- * feature modules whose platform gate scripts/windows/upstream-overlay.patch
+ * feature modules whose platform gate scripts/windows/overlay/*.patch
  * widens to win32. Run it on a prepared copy (scripts/windows/
  * prepare-sources.sh DEST, then node DEST/scripts/tests/windows/...): in the
  * repo itself the gates are upstream's, Linux-only, and this test fails.
@@ -66,6 +66,13 @@ for (const [file, marker] of MODULES) {
   if (file !== "dev_tools_toggle_main.js") { // no platform gate upstream: it runs everywhere
     ok(!run(file, "darwin")[marker], file + ": still off on darwin");
   }
+}
+
+// Usage and session status is a Windows-only module with its own platform check:
+// on for win32, off everywhere else (it is not in MODULES, whose loop expects linux on).
+for (const [platform, want] of [["win32", true], ["linux", false], ["darwin", false]]) {
+  ok(!!run("usage_status_main.js", platform).__cdbUsageStatusMain === want,
+     "usage_status_main.js: " + (want ? "on" : "off") + " for " + platform);
 }
 
 // Allow non-Anthropic models leaves an always-false stub when gated off.

@@ -1,0 +1,13 @@
+diff --git a/js/transcript_limits_main.js b/js/transcript_limits_main.js
+index 7f8b2ec..e944ca0 100644
+--- a/js/transcript_limits_main.js
++++ b/js/transcript_limits_main.js
+@@ -54,7 +54,7 @@
+  */
+ ;/*__CDB_TRANSCRIPT_LIMITS__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   if (globalThis.__cdbTranscriptLimitsMain) return;
+   globalThis.__cdbTranscriptLimitsMain = true;
+ 

@@ -1,0 +1,353 @@
+diff --git a/js/extra_settings_bridge.js b/js/extra_settings_bridge.js
+index 3081a1b..bca4455 100644
+--- a/js/extra_settings_bridge.js
++++ b/js/extra_settings_bridge.js
+@@ -63,6 +63,12 @@
+     githubAlertsSet: function (enabled) {
+       return ipcRenderer.invoke("cdb-github-alerts:set", enabled === true);
+     },
++    usageStatusRead: function () {
++      return ipcRenderer.invoke("cdb-usage-status:read");
++    },
++    usageStatusSet: function (enabled) {
++      return ipcRenderer.invoke("cdb-usage-status:set", enabled === true);
++    },
+     githubAlertIconsRead: function () {
+       return ipcRenderer.invoke("cdb-alert-icons:read");
+     },
+diff --git a/js/extra_settings_main.js b/js/extra_settings_main.js
+index 8a47701..75961ce 100644
+--- a/js/extra_settings_main.js
++++ b/js/extra_settings_main.js
+@@ -477,7 +477,7 @@
+     var value = __cdbEx_readFileKey(p.json, __cdbEx_AAG_KEY);
+     return { value: __cdbEx_aagValid(value) ? value : 0, locked: false, warning: warning };
+   }
+-  if (process.platform === "linux") {
++  if (process.platform === "linux" || process.platform === "win32") {
+     globalThis.__cdbAutoArchiveMergeDelayMinutes = function () { return __cdbEx_aagPref().value; };
+   }
+ 
+@@ -661,6 +661,8 @@
+   function __cdbEx_3pDir() {
+     var ud = _app.getPath("userData");
+     if (process.env.CLAUDE_USER_DATA_DIR) return ud;
++    // Windows (upstream's g1()): the 3P folder is %LOCALAPPDATA%\Claude-3p.
++    if (process.platform === "win32" && process.env.LOCALAPPDATA) return _path.join(process.env.LOCALAPPDATA, "Claude-3p");
+     return /-3p$/.test(ud) ? ud : ud + "-3p";
+   }
+ 
+@@ -3904,6 +3906,29 @@
+       if (typeof globalThis.__cdbGithubAlertsRefresh === "function") globalThis.__cdbGithubAlertsRefresh();
+       return { ok: true, enabled: enabled, path: res.path };
+     },
++    // Usage and session status (Windows build: patches/windows/add_usage_status.nim).
++    // The module reads the key on every page load; the set handler saves it and
++    // asks the main half to re-run the page script in open windows.
++    "cdb-usage-status:read": function () {
++      var p = __cdbEx_paths();
++      var jsonc = __cdbEx_readFileKey(p.jsonc, "usageStatus");
++      var json = __cdbEx_readFileKey(p.json, "usageStatus");
++      return { ok: true, enabled: (jsonc === undefined ? json : jsonc) === true,
++        lockedByJsonc: jsonc !== undefined ? true : null };
++    },
++    "cdb-usage-status:set": function (enabled) {
++      if (typeof enabled !== "boolean") return { ok: false, error: "enabled must be a boolean" };
++      if (__cdbEx_readFileKey(__cdbEx_paths().jsonc, "usageStatus") !== undefined) {
++        return { ok: false, lockedByJsonc: true, error: "usageStatus is set in claude-desktop-extra.jsonc - edit that file to change it" };
++      }
++      var res = __cdbEx_writeCfg(function (cfg) {
++        if (enabled) cfg.usageStatus = true;
++        else delete cfg.usageStatus;
++      });
++      if (!res.ok) return res;
++      if (typeof globalThis.__cdbUsageStatusRefresh === "function") globalThis.__cdbUsageStatusRefresh();
++      return { ok: true, enabled: enabled, path: res.path };
++    },
+     // Reduced projection of the theme registry. cdb-themes:apply / :active stay
+     // owned by the theme picker patch; only this list is ours, because the full
+     // entries carry every token of every palette.
+@@ -4755,8 +4780,6 @@
+         __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix author option is Linux only" }; };
+       } else if (ch.indexOf("cdb-tray:") === 0) {
+         __cdbEx_handlers[ch] = function () { return { ok: false, error: "the tray icon switch is Linux only" }; };
+-      } else if (ch.indexOf("cdb-archive-grace:") === 0) {
+-        __cdbEx_handlers[ch] = function () { return { ok: false, error: "the PR archive delay is Linux only" }; };
+       } else if (ch.indexOf("cdb-autofix-merge-ready:") === 0) {
+         __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix ready-to-merge wake is Linux only" }; };
+       } else if (ch.indexOf("cdb-session-start:") === 0) {
+diff --git a/js/extra_settings_page.js b/js/extra_settings_page.js
+index 93b6a45..90c11ca 100644
+--- a/js/extra_settings_page.js
++++ b/js/extra_settings_page.js
+@@ -588,12 +588,12 @@
+     { kind: "flags", label: "Anthropic", icon: ICON_FLAGS, tooltip: "Anthropic Features" },
+     { kind: "deploy", label: "Deployment", icon: ICON_DEPLOY }
+   ];
+-  // On Windows (a downstream Windows build of this patch set) only custom
+-  // models is carried: the other panels drive Linux-only patches or Linux
+-  // paths (/etc/claude-desktop) that do not exist there. Computer Use is one of
+-  // them: every cdb-cu-status / cdb-cubg / cdb-cu-ax / cdb-cu-ask channel answers "Linux
+-  // only" on win32, so the page would hold nothing.
+-  var WINDOWS_NAV = { models: true };
++  // On Windows (a downstream Windows build of this patch set) the Deployment
++  // panel is left out: it reads and writes /etc/claude-desktop, while Windows
++  // takes managed settings from the registry (SOFTWARE\Policies\Claude).
++  // Computer Use is left out too: every cdb-cu-status / cdb-cubg / cdb-cu-ax /
++  // cdb-cu-ask channel answers "Linux only" on win32, so the page would hold nothing.
++  var WINDOWS_NAV = { themes: true, features: true, models: true, flags: true };
+   if (/^Win/.test((typeof navigator !== "undefined" && navigator.platform) || "")) {
+     NAV_ITEMS = NAV_ITEMS.filter(function (it) { return WINDOWS_NAV[it.kind] === true; });
+   }
+@@ -3067,8 +3067,8 @@
+   function restartButton() {
+     var restart = el("button", "cdbx-btn", "Restart now");
+     restart.type = "button";
+-    restart.title = "Relaunches the app directly, skipping your desktop launcher's systemd scope " +
+-      "and environment - quitting and reopening from the launcher is the cleanest way";
++    restart.title = "Relaunches Claude Desktop - the same as quitting it (tray icon, Quit) and " +
++      "starting it again from the Start menu";
+     restart.addEventListener("click", function () {
+       restart.disabled = true;
+       restart.textContent = "Restarting...";
+@@ -4004,6 +4004,25 @@
+     });
+   }
+ 
++  function renderUsageStatusRow(panel) {
++    return renderToggleRow(panel, {
++      section: "Usage and sessions",
++      title: "Usage and session status",
++      note: "Shows your plan usage with weekly pace in the sidebar and the usage popover, a state badge " +
++        "(working, waiting, ready, error) on each session, and the session's context with Compact session in the " +
++        "popover. Ported from UI+ for Claude. Applies live to open chats.",
++      keywords: "usage pace limit weekly session status badge waiting ready context compact popover sidebar ui+",
++      ariaLabel: "Usage and session status",
++      read: "usageStatusRead", write: "usageStatusSet",
++      isOn: function (r) { return r.enabled === true; },
++      writeArg: function (on) { return on; },
++      describe: function (on) { return on ? "on - usage, pace and session badges shown" : "off - the app looks as shipped"; },
++      lockFile: "claude-desktop-extra.jsonc",
++      errorPrefix: "Could not change usage and session status: ",
++      toast: function (on) { return on ? "Usage and session status enabled" : "Usage and session status disabled"; }
++    });
++  }
++
+   function renderGithubAlertsRow(panel) {
+     return renderToggleRow(panel, {
+       section: "Chat appearance",
+@@ -4255,6 +4274,7 @@
+       renderFrostedReplyFieldRow,
+       renderGithubAlertsRow,
+       renderGithubAlertIconsRow,
++      renderUsageStatusRow,
+       renderDevToolsRow
+     ] },
+     { title: "Models and 3P", sub: "Extra models and gateway options", items: [
+@@ -4265,6 +4285,28 @@
+       renderCuEscapeAbortRow
+     ] }
+   ];
++  // The Windows build ships these rows' patches. Window controls, the native
++  // titlebar and window transparency are Linux window handling (Windows draws
++  // its own caption buttons), and a row added upstream stays hidden here until
++  // its patch is ported and listed. A group left with no row is dropped.
++  if (/^Win/.test((typeof navigator !== "undefined" && navigator.platform) || "")) {
++    var WINDOWS_ROWS = [renderDiffViewsRow, renderPanelTabsRow, renderFilesQuickOpenRow, renderCustomModelsRow,
++      renderAllowNonAnthropicModelsRow, renderTranscriptLimitsRow, renderThemePickerRow, renderDevToolsRow,
++      renderAutoArchiveGraceRow, renderJiraTrackerRow, renderUsageStatusRow];
++    var keepWindowsRows = function (items) {
++      var out = [];
++      items.forEach(function (it) {
++        if (typeof it === "function") {
++          if (WINDOWS_ROWS.indexOf(it) >= 0) out.push(it);
++          return;
++        }
++        var kept = keepWindowsRows(it.items);
++        if (kept.length) out.push(Object.assign({}, it, { items: kept }));
++      });
++      return out;
++    };
++    FEATURE_GROUPS = keepWindowsRows(FEATURE_GROUPS);
++  }
+ 
+   function renderFeatures(panel) {
+     clear(panel);
+@@ -4711,7 +4753,7 @@
+ 
+ 
+       var files = el("div", "cdbx-note cdbx-models-files",
+-        "Keys are stored in " + (st.paths && st.paths.secrets) + " (0600), never in the files below. " +
++        "Keys are stored in " + (st.paths && st.paths.secrets) + " (in your user profile), never in the files below. " +
+         "Routing changes (a key, a model, a provider) reach open sessions at once through " + (st.paths && st.paths.routes) +
+         ". New models show in the picker after the Code tab reloads. Sub-agent types, the default sub-agent " +
+         "model, the small/fast model and the system-prompt line are handed to each session as it opens. A " +
+@@ -5029,7 +5071,7 @@
+       var url = field(form, "Base URL", input("text", existing ? existing.baseUrl : "", "https://api.example.com/anthropic"),
+         "The Anthropic-compatible endpoint; /v1/messages is appended.");
+       var key = field(form, "API key", input("password", "", existing && existing.keyOk ? "stored - type to replace" : "API key"),
+-        "Stored in a 0600 file in this profile, never shown again, sent only to that endpoint.");
++        "Stored in a file in this profile, never shown again, sent only to that endpoint.");
+       var modelsUrl = field(form, "Models list URL", input("text", existing ? existing.modelsUrl || "" : "", "optional - found automatically"),
+         "Where the provider lists its models (GET, OpenAI or Anthropic shape), on the base URL's host - the key " +
+         "goes nowhere else. Left empty, fetch models tries the preset's address, then <base URL>/v1/models, " +
+@@ -5535,9 +5577,8 @@
+     var notice = el("div", "cdbx-notice");
+     notice.appendChild(el("div", "cdbx-notice-title", "Changes here require a restart of Claude Desktop"));
+     notice.appendChild(el("div", "cdbx-notice-body",
+-      "Overrides are saved immediately, but most flags are read once at startup. " +
+-      "Quitting Claude Desktop and reopening it from your desktop launcher is the cleanest way: " +
+-      "\"Restart now\" relaunches the app directly and so skips the launcher's systemd scope and environment."));
++      "Overrides are saved immediately, but most flags are read once at startup: use " +
++      "\"Restart now\", or quit Claude Desktop (tray icon, Quit) and start it again."));
+     var restart = restartButton();
+     notice.appendChild(restart);
+     panel.appendChild(notice);
+diff --git a/js/theme_picker_page.html b/js/theme_picker_page.html
+index 1057cda..7bd636a 100644
+--- a/js/theme_picker_page.html
++++ b/js/theme_picker_page.html
+@@ -931,7 +931,7 @@ kbd{
+   function boot() {
+     if (!window.cdbThemes) {
+       fail("The theme bridge did not load",
+-           "Nothing was exposed on this page, so it cannot read or change themes. Restart Claude Desktop, and if it happens again check ~/.config/Claude/logs/claude-patches.log.");
++           "Nothing was exposed on this page, so it cannot read or change themes. Restart Claude Desktop, and if it happens again check claude-patches.log in the logs folder of Claude's data folder (under %APPDATA%).");
+       return;
+     }
+     Promise.all([window.cdbThemes.list(), window.cdbThemes.active()]).then(function (res) {
+diff --git a/patches/community/add_feature_theme_picker.nim b/patches/community/add_feature_theme_picker.nim
+index 38265f3..9355c1f 100644
+--- a/patches/community/add_feature_theme_picker.nim
++++ b/patches/community/add_feature_theme_picker.nim
+@@ -47,7 +47,7 @@ const PICKER_PRELOAD = staticRead("../../js/theme_picker_preload.js")
+ 
+ const PICKER_JS_HEAD =
+   """;(function(){
+-if(process.platform!=="linux")return;
++if(process.platform!=="linux"&&process.platform!=="win32")return;
+ var _electron=require("electron"),_app=_electron.app,_bw=_electron.BrowserWindow,_ipc=_electron.ipcMain;
+ var _path=require("path"),_fs=require("fs");
+ var __cdbPk_marker="__cdb_theme_picker";
+@@ -69,7 +69,7 @@ var __cdbPk_win=null;
+ // truncates the file.
+ var __cdbPk_JSONC="claude-desktop-extra.jsonc",__cdbPk_JSON="claude-desktop-extra.json";
+ function __cdbPk_strip(s){return String(s).replace(/("(?:[^"\\]|\\.)*")|\/\*[\s\S]*?\*\/|\/\/[^\n\r]*/g,function(m,str){return str?str:""}).replace(/,(\s*[}\]])/g,"$1")}
+-function __cdbPk_key(file){try{var c=JSON.parse(__cdbPk_strip(_fs.readFileSync(file,"utf8"))||"{}");if(c&&typeof c==="object"&&!Array.isArray(c))return c.themePicker}catch(e){}return undefined}
++function __cdbPk_key(file){try{var c=JSON.parse(__cdbPk_strip(_fs.readFileSync(file,"utf8").replace(/^\uFEFF/,""))||"{}");if(c&&typeof c==="object"&&!Array.isArray(c))return c.themePicker}catch(e){}return undefined}
+ // Read on every press rather than cached: the settings page writes the file
+ // directly, and a chord is rare enough that two stats cost nothing. The .jsonc is
+ // the human-owned file and wins, like every other consumer of this config. Absent
+@@ -113,7 +113,7 @@ return;
+ }
+ var a=__cdbPk_assets();
+ __cdbPk_win=new _bw({width:920,height:660,minWidth:520,minHeight:420,title:"Themes",backgroundColor:"#0e0e11",autoHideMenuBar:true,webPreferences:{preload:a.preload,contextIsolation:true,nodeIntegration:false,sandbox:true,spellcheck:false}});
+-__cdbPk_win.setMenuBarVisibility(false);
++__cdbPk_win.removeMenu();
+ __cdbPk_win.on("closed",function(){__cdbPk_win=null});
+ __cdbPk_win.loadFile(a.html);
+ __cdbPk_log("window opened ("+a.html+")");
+diff --git a/patches/core/add_feature_custom_themes.nim b/patches/core/add_feature_custom_themes.nim
+index 9b0a6d6..c8dd48c 100644
+--- a/patches/core/add_feature_custom_themes.nim
++++ b/patches/core/add_feature_custom_themes.nim
+@@ -244,7 +244,7 @@ static:
+ # Head of the injected IIFE: helpers + the curated built-in themes.
+ const THEME_INJECTION_JS_HEAD =
+   """;(function(){
+-if(process.platform!=="linux")return;
++if(process.platform!=="linux"&&process.platform!=="win32")return;
+ var _path=require("path"),_fs=require("fs"),_app=require("electron").app,_nt=require("electron").nativeTheme,_BW=require("electron").BrowserWindow;
+ // The effective app mode: upstream sets nativeTheme.themeSource from its Appearance setting, so
+ // shouldUseDarkColors is the mode the renderer shows (system/light/dark all resolve here).
+@@ -416,7 +416,7 @@ __cdb_migrate();
+ // js/extra_settings_main.js: if they disagree, the theme engine and the flag
+ // loader disagree about what the very same file says.
+ var __cdb_stripJsonc=function(s){var o="",q=false,i=0;while(i<s.length){var c=s[i];if(q){o+=c;if(c==="\\"&&i+1<s.length){o+=s[i+1];i++}else if(c==='"'){q=false}i++;continue}if(c==='"'){q=true;o+=c;i++;continue}if(c==="/"&&s[i+1]==="/"){while(i<s.length&&s[i]!=="\n")i++;continue}if(c==="/"&&s[i+1]==="*"){i+=2;while(i<s.length&&!(s[i]==="*"&&s[i+1]==="/"))i++;i+=2;continue}if(c===","){var j=i+1;while(j<s.length){if(s[j]===" "||s[j]==="\t"||s[j]==="\r"||s[j]==="\n"){j++;continue}if(s[j]==="/"&&s[j+1]==="/"){while(j<s.length&&s[j]!=="\n")j++;continue}if(s[j]==="/"&&s[j+1]==="*"){j+=2;while(j<s.length&&!(s[j]==="*"&&s[j+1]==="/"))j++;j+=2;continue}break}if(s[j]==="}"||s[j]==="]"){i++;continue}}o+=c;i++}return o};
+-var __cdb_readRaw=function(p){try{return _fs.readFileSync(p,"utf8")}catch(e){if(e.code!=="ENOENT")__cdb_log("Error reading "+p+": "+e.message);return null}};
++var __cdb_readRaw=function(p){try{return _fs.readFileSync(p,"utf8").replace(/^\uFEFF/,"")}catch(e){if(e.code!=="ENOENT")__cdb_log("Error reading "+p+": "+e.message);return null}};
+ var __cdb_parseFailed=false;
+ var __cdb_readCfg=function(p){var r=__cdb_readRaw(p);if(r===null)return null;try{return JSON.parse(__cdb_stripJsonc(r))}catch(e){__cdb_parseFailed=true;__cdb_log("Error parsing "+p+": "+e.message);return null}};
+ // One theme per file from themes.d/. A file is either the theme object itself (name =
+diff --git a/patches/core/add_feature_extra_settings.nim b/patches/core/add_feature_extra_settings.nim
+index f03ea70..0c45304 100644
+--- a/patches/core/add_feature_extra_settings.nim
++++ b/patches/core/add_feature_extra_settings.nim
+@@ -305,6 +305,14 @@ proc apply*(input: string): string =
+     elif landed.len > 1:
+       echo "  [FAIL] VM probe capture: " & $landed.len & " end-state hits (expected 1)"
+       quit(1)
++    elif findAll(result, re2"""[{,]qemuPath:[\w$]+[,}]""").len == 0 and
++        findAll(result, re2"""[{,]virtiofsdPath:[\w$]+[,}]""").len == 0:
++      # The Windows package (5.1231.0) has no QEMU backend: no minified object
++      # carries a qemu or virtiofsd path at all (sub-patch A's module names
++      # them only with spaces or in calls). Its only consumer, the Linux
++      # Computer Use status page, answers "Linux only" on win32.
++      echo "  [OK] VM probe capture: no QEMU/virtiofsd probe in this bundle (Windows package), nothing to publish"
++      patchesApplied.inc
+     else:
+       # Groups: 0 the cache assigned, 1 the cache the IIFE returns, 2 the memo,
+       # 3 the getter, 4 the cache the getter returns. 0, 1 and 4 must agree.
+diff --git a/scripts/tests/core/test-extra-settings-dom.mjs b/scripts/tests/core/test-extra-settings-dom.mjs
+index 98ab8b2..d421861 100644
+--- a/scripts/tests/core/test-extra-settings-dom.mjs
++++ b/scripts/tests/core/test-extra-settings-dom.mjs
+@@ -3835,11 +3835,34 @@ async function run() {
+   const box = navbox();
+ 
+   // --- the Windows build: the page runs with navigator.platform "Win32" and
+-  //     offers the Models panel only.
++  //     offers Themes, Community, Models and Anthropic, and only the shipped
++  //     Community rows.
+   if (kind === "windows") {
+-    ok(items.length === 1, "Windows: one row was added (" + items.length + ")");
+-    ok(items.length === 1 && items[0].textContent.trim() === "Models",
+-       "Windows: the row is Models (" + (items[0] ? items[0].textContent.trim() : "none") + ")");
++    const names = items.map(function (it) { return it.textContent.trim(); });
++    ok(names.join(",") === "Themes,Community,Models,Anthropic",
++       "Windows: Themes, Community, Models and Anthropic, no Deployment (" + names.join(",") + ")");
++    for (const it of items) await assertPanelMounts(it);
++    const community = items[names.indexOf("Community")];
++    if (community) {
++      community.click();
++      await sleep(120);
++      const panel = document.querySelector(".cdbx-panel");
++      const has = function (label) { return !!(panel && panel.querySelector('.cdbx-switch[aria-label="' + label + '"]')); };
++      ["open the main window frameless, without window-control buttons or a shadow",
++       "use the system window frame instead of this app's integrated titlebar",
++       "make the main window transparent",
++       "let Computer Use work on a background display instead of your desktop"].forEach(function (label) {
++        ok(!has(label), "Windows: no Linux-only row: " + label);
++      });
++      ["load large Code sessions in full",
++       "allow non-Anthropic models from a third-party gateway in the model list",
++       "show the Jira issue tracker",
++       "Usage and session status"].forEach(function (label) {
++        ok(has(label), "Windows: the shipped row is there: " + label);
++      });
++      ok(!!(panel && panel.querySelector("#cdbx-archive-grace-preset")), "Windows: the shipped row is there: the PR archive delay");
++    }
++    const modelsItem = items[names.indexOf("Models")];
+     window.__cmConfig = { ok: true, enabled: true, configured: true, lockedByJsonc: false, source: "default",
+       surfaces: ["ccd", "code"], models: 1, webSearch: "", webSearchLocked: false,
+       smallFastModel: "", smallFastModelLocked: false, searchConflict: "", subagentModel: "", subagentModelLocked: false,
+@@ -3855,8 +3878,8 @@ async function run() {
+         keySource: "stored", preset: "opencode-go", sessionHeader: "x-opencode-session", effort: ["low", "max"], context: "1m",
+         models: [{ id: "glm-5.3", alias: "claude-glm-5.3", listedAs: ["claude-glm-5.3[1m]"], name: "GLM-5.3",
+           description: "", vision: false, thinking: true, context: "1m", effort: ["low", "max"], effortDefault: "max", badge: "", agent: false }] }] };
+-    if (items.length === 1) {
+-      await assertPanelMounts(items[0]);
++    if (modelsItem) {
++      await assertPanelMounts(modelsItem);
+       const winPanel = document.querySelector(".cdbx-panel");
+       const winCard = winPanel && winPanel.querySelector(".cdbx-models-card");
+       ok(!!winCard && /session header x-opencode-session/.test(winCard.querySelector(".cdbx-state").textContent),
+@@ -4450,6 +4473,8 @@ window.cdbExtra = {
+   transparentChatComposerSet: function (on) { window.__transparentReply=on; return Promise.resolve({ok:true}); },
+   githubAlertsRead: function () { return Promise.resolve(window.__ghAlertsState || { ok: true, enabled: !!window.__ghAlertsOn, lockedByJsonc: null }); },
+   githubAlertsSet: function (on) { window.__ghAlertsCalls = (window.__ghAlertsCalls || []).concat([on]); window.__ghAlertsOn = on; return Promise.resolve({ ok: true, enabled: on }); },
++  usageStatusRead: function () { return Promise.resolve({ ok: true, enabled: !!window.__usageStatusOn, lockedByJsonc: null }); },
++  usageStatusSet: function (on) { window.__usageStatusOn = on; return Promise.resolve({ ok: true, enabled: on }); },
+   githubAlertIconsRead: function () { return Promise.resolve(window.__ghIconsState || { ok: true, enabled: !!window.__ghIconsOn, lockedByJsonc: null }); },
+   githubAlertIconsSet: function (on) { window.__ghIconsCalls = (window.__ghIconsCalls || []).concat([on]); window.__ghIconsOn = on; return Promise.resolve({ ok: true, enabled: on }); },
+   themesList: stub({ ok: true, entries: window.__themes, active: "mario",

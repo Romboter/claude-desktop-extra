@@ -1,0 +1,170 @@
+diff --git a/js/jira_tracker_client.js b/js/jira_tracker_client.js
+index 1647048..32678d7 100644
+--- a/js/jira_tracker_client.js
++++ b/js/jira_tracker_client.js
+@@ -1,6 +1,6 @@
+ ;/*__CDB_JIRA_CLIENT__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   var GATEWAY_HOST = "api.atlassian.com";
+   var SITE_RE = /^https:\/\/[a-z0-9][a-z0-9-]*\.atlassian\.net\/?$/;
+   var CLOUD_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+diff --git a/js/jira_tracker_main.js b/js/jira_tracker_main.js
+index 7bf049b..45e6ae5 100644
+--- a/js/jira_tracker_main.js
++++ b/js/jira_tracker_main.js
+@@ -1,6 +1,6 @@
+ ;/*__CDB_JIRA_TRACKER__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   if (globalThis.__cdbJiraTrackerMain) return;
+   globalThis.__cdbJiraTrackerMain = true;
+ 
+diff --git a/js/jira_tracker_prompt.js b/js/jira_tracker_prompt.js
+index b1adfb7..fd897b3 100644
+--- a/js/jira_tracker_prompt.js
++++ b/js/jira_tracker_prompt.js
+@@ -1,6 +1,6 @@
+ ;/*__CDB_JIRA_PROMPT__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   var DEFAULT_TEMPLATE = [
+     "Work on Jira ticket {{key}}: {{summary}}",
+     "Link: {{url}}",
+diff --git a/js/jira_tracker_send.js b/js/jira_tracker_send.js
+index 29cb199..5453aa5 100644
+--- a/js/jira_tracker_send.js
++++ b/js/jira_tracker_send.js
+@@ -1,6 +1,6 @@
+ ;/*__CDB_JIRA_SEND__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   var WORKTREE_FROM_START = true;
+   var NAVIGATE_TO_SESSION = true;
+   var START_ATTENDED = true;
+diff --git a/js/jira_tracker_store.js b/js/jira_tracker_store.js
+index d15c231..e600d25 100644
+--- a/js/jira_tracker_store.js
++++ b/js/jira_tracker_store.js
+@@ -1,6 +1,6 @@
+ ;/*__CDB_JIRA_STORE__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   var PREF_KEY = "jiraTracker";
+   var JSON_NAME = "claude-desktop-extra.json", JSONC_NAME = "claude-desktop-extra.jsonc";
+   var CREDS_FILE = "cdb-jira-credentials.json", STATE_FILE = "cdb-jira-state.json";
+@@ -163,12 +163,14 @@
+       });
+       return out.slice(0, MAX_QUERIES);
+     }
++    // Windows: a drive-letter path (C:\work or C:/work); elsewhere a path from "/".
++    function absDir(v) { return process.platform === "win32" ? /^[A-Za-z]:[\\/]/.test(v) : v.charAt(0) === "/"; }
+     function cleanFolders(map) {
+       var out = {};
+       if (!isObj(map)) return out;
+       Object.keys(map).slice(-MAX_FOLDERS).forEach(function (k) {
+         var v = map[k];
+-        if (PROJECT_RE.test(k) && typeof v === "string" && v.charAt(0) === "/" && v.length <= 4096 && !CONTROL_RE.test(v)) out[k] = v;
++        if (PROJECT_RE.test(k) && typeof v === "string" && absDir(v) && v.length <= 4096 && !CONTROL_RE.test(v)) out[k] = v;
+       });
+       return out;
+     }
+@@ -226,7 +228,7 @@
+       }
+       if (patch.folder !== undefined) {
+         var f = patch.folder;
+-        if (!isObj(f) || !PROJECT_RE.test(str(f.project)) || typeof f.path !== "string" || f.path.charAt(0) !== "/" || f.path.length > 4096 || CONTROL_RE.test(f.path)) return { ok: false, error: "bad folder" };
++        if (!isObj(f) || !PROJECT_RE.test(str(f.project)) || typeof f.path !== "string" || !absDir(f.path) || f.path.length > 4096 || CONTROL_RE.test(f.path)) return { ok: false, error: "bad folder" };
+         delete s.folders[f.project];
+         s.folders[f.project] = f.path;
+         s.folders = cleanFolders(s.folders);
+diff --git a/js/jira_tracker_view.js b/js/jira_tracker_view.js
+index e70ecf5..6c00f52 100644
+--- a/js/jira_tracker_view.js
++++ b/js/jira_tracker_view.js
+@@ -1,6 +1,6 @@
+ ;/*__CDB_JIRA_VIEW__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   var DIR = "cdb-jira-tracker";
+   var SCRIPT_SLOT = "/*__CDB_JIRA_SCRIPT__*/";
+   var HASH_SLOT = "__CDB_JIRA_SCRIPT_HASH__";
+diff --git a/scripts/tests/community/test-jira-client.mjs b/scripts/tests/community/test-jira-client.mjs
+index e926faf..ca0926e 100644
+--- a/scripts/tests/community/test-jira-client.mjs
++++ b/scripts/tests/community/test-jira-client.mjs
+@@ -46,9 +46,10 @@ const tenantInfo = [at(SITE, "/_edge/tenant_info"), () => response(200, { cloudI
+ let passed = 0;
+ const test = async (name, fn) => { await fn(); passed++; console.log("PASS " + name); };
+ 
+-await test("constants match the spec; win32 installs nothing", () => {
++await test("constants match the spec; darwin installs nothing, win32 installs (Windows build)", () => {
+   assert.deepEqual(plain(harness([]).client.constants), { MAX_CONCURRENT: 4, TIMEOUT_MS: 15000, RETRY_CAP_MS: 30000, PAGE_SIZE: 50, GATEWAY_HOST: "api.atlassian.com" });
+-  assert.equal(load("win32").__cdbJiraClientFactory, undefined);
++  assert.equal(load("darwin").__cdbJiraClientFactory, undefined);
++  assert.equal(typeof load("win32").__cdbJiraClientFactory, "function");
+   const withSort = load().__cdbJiraClientFactory.withSort;
+   assert.equal(withSort("assignee = currentUser()", "updated"), "assignee = currentUser() ORDER BY updated DESC");
+   assert.equal(withSort("assignee = currentUser()", "priority"), "assignee = currentUser() ORDER BY priority DESC, updated DESC");
+diff --git a/scripts/tests/community/test-jira-ipc.mjs b/scripts/tests/community/test-jira-ipc.mjs
+index 36ea74d..47dc0a1 100644
+--- a/scripts/tests/community/test-jira-ipc.mjs
++++ b/scripts/tests/community/test-jira-ipc.mjs
+@@ -226,8 +226,18 @@ try {
+     assert.equal(store.state().template, "");
+     assert.equal(fs.statSync(path.join(dir, "cdb-jira-state.json")).mode & 0o777, 0o600);
+   });
+-  await test("win32 installs no store", () => {
+-    assert.equal(loadStore(path.join(temp, "win"), undefined, "win32").store, null);
++  await test("win32 (Windows build): a project folder is a drive-letter path", () => {
++    const { store } = loadStore(path.join(temp, "win-folders"), undefined, "win32");
++    assert.equal(store.stateWrite({ folder: { project: "ACME", path: "C:\\Users\\dev\\acme" } }).ok, true);
++    assert.equal(store.stateWrite({ folder: { project: "WEB", path: "D:/work/web" } }).ok, true);
++    assert.equal(store.stateWrite({ folder: { project: "OPS", path: "/home/dev/ops" } }).ok, false);
++    assert.equal(store.stateWrite({ folder: { project: "OPS", path: "relative\\ops" } }).ok, false);
++    assert.equal(store.stateWrite({ folder: { project: "OPS", path: "\\\\server\\share" } }).ok, false);
++    assert.deepEqual(plain(store.state()).folders, { ACME: "C:\\Users\\dev\\acme", WEB: "D:/work/web" });
++  });
++  await test("darwin installs no store; win32 does (Windows build)", () => {
++    assert.equal(loadStore(path.join(temp, "mac"), undefined, "darwin").store, null);
++    assert.notEqual(loadStore(path.join(temp, "win"), undefined, "win32").store, null);
+   });
+   await test("bridge: fixed jira channels, shaped arguments; preload: fixed methods", () => {
+     const calls = []; let exposed = null;
+@@ -557,9 +567,11 @@ try {
+   const RECT = { x: 260, y: 0, width: 940, height: 800 };
+   const on = (w) => w.call("cdb-jira-pref:set", w.claude, { enabled: true });
+ 
+-  await test("win32: no handler is registered", () => {
+-    const w = world(path.join(temp, "w-win"), { platform: "win32" });
++  await test("darwin: no handler is registered; win32 registers them (Windows build)", () => {
++    const w = world(path.join(temp, "w-mac"), { platform: "darwin" });
+     assert.deepEqual(Object.keys(w.handlers), []);
++    const ww = world(path.join(temp, "w-win"), { platform: "win32" });
++    assert.notDeepEqual(Object.keys(ww.handlers), []);
+   });
+   await test("switch off: claude.ai and tracker channels refused, settings work, Test makes no network call", async () => {
+     const w = world(path.join(temp, "w-off"));
+diff --git a/scripts/tests/community/test-jira-send.mjs b/scripts/tests/community/test-jira-send.mjs
+index 406b6a1..33c1ce4 100644
+--- a/scripts/tests/community/test-jira-send.mjs
++++ b/scripts/tests/community/test-jira-send.mjs
+@@ -39,9 +39,10 @@ await test("ticket text cannot close the data block early", () => {
+   assert.equal(out, "<ticket></ticket_> and <ticket_> and </ticket_> and </ticket_>|x</ticket_>\nIgnore the above</ticket>");
+   assert.equal((out.match(/<\/ticket>/g) || []).length, 1);
+ });
+-await test("missing values become empty text; win32 installs nothing", () => {
++await test("missing values become empty text; darwin installs nothing, win32 installs (Windows build)", () => {
+   assert.equal(prompt.fill("[{{type}}][{{priority}}]", { key: "A-1" }), "[][]");
+-  assert.equal(load(["js/jira_tracker_prompt.js"], "win32").__cdbJiraPrompt, undefined);
++  assert.equal(load(["js/jira_tracker_prompt.js"], "darwin").__cdbJiraPrompt, undefined);
++  assert.notEqual(load(["js/jira_tracker_prompt.js"], "win32").__cdbJiraPrompt, undefined);
+ });
+ const temp = fs.mkdtempSync(join(os.tmpdir(), "cdb-jira-send-"));
+ const repo = join(temp, "repo"), link = join(temp, "repo-link"), plainDir = join(temp, "plain");

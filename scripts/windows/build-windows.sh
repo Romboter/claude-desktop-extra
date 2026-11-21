@@ -5,7 +5,7 @@
 # Anthropic's official Windows build (the Squirrel .nupkg the official
 # installer fetches), verifies it against the RELEASES manifest, patches
 # app.asar with the Windows patch set (apply_patches.py --windows, from a copy
-# of the sources with scripts/windows/upstream-overlay.patch applied - see
+# of the sources with scripts/windows/overlay/*.patch applied - see
 # scripts/windows/prepare-sources.sh),
 # repacks it, rewrites the asar integrity hash embedded in claude.exe, and
 # zips the result with an installer script.
