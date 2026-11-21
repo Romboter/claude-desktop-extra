@@ -194,7 +194,8 @@ jobs:
             '[transcript-limits] installed (main)',
             '[cdb-jira] installed; switch',
             '[archive-grace] installed (main)',
-            '[win-update] armed'
+            '[win-update] armed',
+            '[usage-status] installed (main)'
           )
           do {
             Start-Sleep -Seconds 5

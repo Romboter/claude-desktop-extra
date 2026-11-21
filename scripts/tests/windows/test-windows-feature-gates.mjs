@@ -68,6 +68,13 @@ for (const [file, marker] of MODULES) {
   }
 }
 
+// Usage and session status is a Windows-only module with its own platform check:
+// on for win32, off everywhere else (it is not in MODULES, whose loop expects linux on).
+for (const [platform, want] of [["win32", true], ["linux", false], ["darwin", false]]) {
+  ok(!!run("usage_status_main.js", platform).__cdbUsageStatusMain === want,
+     "usage_status_main.js: " + (want ? "on" : "off") + " for " + platform);
+}
+
 // Allow non-Anthropic models leaves an always-false stub when gated off.
 {
   const on = run("allow_non_anthropic_models.js", "win32").__cdbAllowNonAnthropicModels;
