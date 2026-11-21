@@ -1,0 +1,95 @@
+diff --git a/js/files_quick_open_main.js b/js/files_quick_open_main.js
+index a724043..d43f9db 100644
+--- a/js/files_quick_open_main.js
++++ b/js/files_quick_open_main.js
+@@ -13,7 +13,7 @@
+  */
+ ;/*__CDB_FILES_QUICK_OPEN__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   if (globalThis.__cdbFilesQuickOpenMain) return;
+   globalThis.__cdbFilesQuickOpenMain = true;
+ 
+diff --git a/js/files_quick_open_page.js b/js/files_quick_open_page.js
+index de45ab3..3e35ef8 100644
+--- a/js/files_quick_open_page.js
++++ b/js/files_quick_open_page.js
+@@ -140,9 +140,21 @@
+   function filesPane() { return document.querySelector(PANE_SEL); }
+   // A folder path with exactly one trailing slash, or null. The tile root is
+   // concatenated with a relative path, so the slash has to be certain.
++  // Windows: a native root (C:\\repo) keeps its own separator, so the paths
++  // joined to it match what a tree click opens.
+   function normRoot(r) {
+     if (typeof r !== "string" || !r) return null;
+-    return r.charAt(r.length - 1) === "/" ? r : r + "/";
++    if (/[\\/]$/.test(r)) return r;
++    return r + (r.indexOf("\\") !== -1 && r.indexOf("/") === -1 ? "\\" : "/");
++  }
++  // root + an index-relative path, which upstream always spells with "/".
++  function joinRel(root, rel) {
++    return root.charAt(root.length - 1) === "\\" ? root + rel.replace(/\//g, "\\") : root + rel;
++  }
++  // Whether abs lies under root; Windows paths compare without case.
++  function underRoot(abs, root) {
++    if (root.indexOf("\\") === -1) return abs.indexOf(root) === 0;
++    return abs.toLowerCase().indexOf(root.toLowerCase()) === 0;
+   }
+   // The tree's open handler, plus the root it was rendered for. A ROW is the only
+   // start that was ever measured to work (hop ~12, the list component just above
+@@ -197,9 +209,10 @@
+       var f = fiberOf(rows[r]), i = 0;
+       while (f && i++ < MAX_HOPS) {
+         var p = f.memoizedProps, e = p && p.entry;
++        // Windows: absPath is native (\\), relativePath uses "/"; same length.
+         if (e && typeof e.absPath === "string" && typeof e.relativePath === "string" &&
+             e.absPath.length > e.relativePath.length &&
+-            e.absPath.slice(e.absPath.length - e.relativePath.length) === e.relativePath) {
++            e.absPath.replace(/\\/g, "/").slice(e.absPath.length - e.relativePath.length) === e.relativePath) {
+           return e.absPath.slice(0, e.absPath.length - e.relativePath.length);
+         }
+         f = f.return;
+@@ -422,7 +435,7 @@
+   function mruItems() {
+     if (!haveRoot()) return [];
+     var root = ctx.root;
+-    return readMru().slice(0, MAX_RESULTS).map(function (rel) { return { rel: rel, abs: root + rel, positions: [] }; });
++    return readMru().slice(0, MAX_RESULTS).map(function (rel) { return { rel: rel, abs: joinRel(root, rel), positions: [] }; });
+   }
+ 
+   // ---- modal ------------------------------------------------------------------
+@@ -588,7 +601,7 @@
+       var q = parseQuery(inputEl.value);
+       if (!q.text) hint(items.length ? HINT_MRU : HINT_EMPTY);
+       else if (!items.length) hint(HINT_NO_MATCH);
+-      else if (ctx.root && items[0].abs.indexOf(ctx.root) !== 0) hint(HINT_OTHER_ROOT);
++      else if (ctx.root && !underRoot(items[0].abs, ctx.root)) hint(HINT_OTHER_ROOT);
+       else hint(HINT_KEYS);
+     }
+   }
+@@ -605,7 +618,7 @@
+     if (!it || !ctx || !ctx.onPreview) return;
+     // Prefer the tile's own root: the index follows the FOCUSED session's cwd,
+     // which can differ from the folder this tile shows (measured 2026-08-29).
+-    var abs = ctx.root ? ctx.root + it.rel : it.abs;
++    var abs = ctx.root ? joinRel(ctx.root, it.rel) : it.abs;
+     var line = parseQuery(inputEl.value).line;
+     try { ctx.onPreview(abs, line); }
+     catch (e) { warnOnce("onpreview-threw", "onPreview threw: " + ((e && e.message) || e)); hint("Could not open " + it.rel); return; }
+diff --git a/js/files_quick_open_worker.js b/js/files_quick_open_worker.js
+index 1433d10..550bce7 100644
+--- a/js/files_quick_open_worker.js
++++ b/js/files_quick_open_worker.js
+@@ -76,7 +76,10 @@ function __cdbQoScorePath(path, pieces) {
+   for (var c = 0; c < path.length; c++) if (path.charAt(c) === "/") score -= 2;   // depth penalty
+   return score;
+ }
+-function __cdbQoSearch(index, query, limit) {
++// `knownTotal` (optional) is the number of indexed paths for scorers that no
++// longer expose `readyCount` (Anthropic's Windows 6.28899 worker: the call site
++// passes the host's `this.files.size`, which is exactly what the index was built from).
++function __cdbQoSearch(index, query, limit, knownTotal) {
+   "use strict";
+   var raw = String(query == null ? "" : query);
+   var on = false;

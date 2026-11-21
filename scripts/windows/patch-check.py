@@ -91,7 +91,7 @@ def extract_deb(deb, work):
 
 
 def prepare_sources(dest):
-    """What prepare-sources.sh does, without bash: tracked files + the overlay."""
+    """What prepare-sources.sh does, without bash: tracked files + the overlay patches."""
     dest.mkdir(parents=True)
     files = subprocess.run(["git", "-C", str(REPO), "ls-files", "-z"], capture_output=True, check=True).stdout.split(b"\x00")
     for f in filter(None, files):
@@ -99,8 +99,11 @@ def prepare_sources(dest):
         (dest / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO / rel, dest / rel)
     git = ["git", "-C", str(dest), "-c", "user.name=o", "-c", "user.email=o@l"]
-    for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "pristine"], ["apply", str(REPO / "scripts/windows/upstream-overlay.patch")]):
+    for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "pristine"]):
         subprocess.run(git + cmd, check=True)
+    for patch in sorted((REPO / "scripts/windows/overlay").glob("*.patch")):
+        if subprocess.run(git + ["apply", str(patch)]).returncode:
+            sys.exit(f"overlay patch {patch.name} no longer applies")
 
 
 def main():

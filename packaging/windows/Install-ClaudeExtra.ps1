@@ -137,8 +137,11 @@ if ($HasZip -or (Test-Path (Join-Path $SourceDir 'claude.exe'))) {
     Copy-Item -Recurse -Force $SourceDir $staging
   }
   if (-not (Test-Path (Join-Path $staging 'claude.exe'))) { throw "claude.exe missing after unpacking to $staging" }
-  if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
-  Rename-Item $staging 'app'
+  # Empty $dest and move the files in, rather than deleting and renaming the
+  # folder: something (Explorer, a terminal) can hold the folder open.
+  if (Test-Path $dest) { Get-ChildItem -Force $dest | Remove-Item -Recurse -Force } else { New-Item -ItemType Directory -Path $dest | Out-Null }
+  Get-ChildItem -Force $staging | Move-Item -Destination $dest
+  Remove-Item -Force $staging
   foreach ($f in @('VERSION.txt', 'README-Windows.txt', 'Install-ClaudeExtra.ps1', 'Install.cmd')) {
     $p = Join-Path $PSScriptRoot $f
     if (Test-Path $p) { Copy-Item -Force $p $InstallDir }

@@ -1,0 +1,13 @@
+diff --git a/js/allow_non_anthropic_models.js b/js/allow_non_anthropic_models.js
+index dffbee5..1cabb5f 100644
+--- a/js/allow_non_anthropic_models.js
++++ b/js/allow_non_anthropic_models.js
+@@ -34,7 +34,7 @@
+  */
+ ;/*__CDB_ALLOW_NONANTHROPIC__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") {
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) {
+     globalThis.__cdbAllowNonAnthropicModels = function () { return false; };
+     return;
+   }

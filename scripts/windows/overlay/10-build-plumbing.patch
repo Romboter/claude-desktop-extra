@@ -1,0 +1,218 @@
+diff --git a/patches/Makefile b/patches/Makefile
+index f79c42f..1dae28c 100644
+--- a/patches/Makefile
++++ b/patches/Makefile
+@@ -1,9 +1,10 @@
+ # Build every patch source into a same-named executable next to it.
+ #
+-# Sources live in three category subdirectories:
++# Sources live in four category subdirectories:
+ #   linux/      Linux compatibility fixes (always on)
+ #   core/       always-on infrastructure (themes, extra settings, profiles)
+ #   community/  optional value-add features
++#   windows/    Windows build only (scripts/windows/build-windows.sh)
+ #
+ # Usage:
+ #   make -j$(nproc)      # parallel build (default target = all)
+@@ -21,7 +22,7 @@
+ NIM       ?= nim
+ NIMFLAGS  ?= c -d:release --opt:speed --mm:orc --hints:off
+ 
+-SRCS := $(wildcard linux/*.nim community/*.nim core/*.nim)
++SRCS := $(wildcard linux/*.nim community/*.nim core/*.nim windows/*.nim)
+ BINS := $(SRCS:.nim=)
+ 
+ ifeq ($(strip $(SRCS)),)
+@@ -209,5 +210,14 @@ community/add_feature_jira_tracker: \
+   ../js/jira_tracker_web_page.js
+ 
+ 
++# Windows build only: profile selection and sign-in callback routing.
++windows/add_windows_profiles: ../js/windows_profiles_main.js
++
++# Windows build only: the notice that a newer windows-v release is out.
++windows/add_windows_update_notice: ../js/windows_update_notice_main.js
++
++# Windows build only: usage with pace, session state and context (a UI+ port).
++windows/add_usage_status: ../js/usage_status_main.js ../js/usage_status_page.js ../js/usage_status.css
++
+ clean:
+ 	@rm -rf $(BINS) .nimcache
+diff --git a/scripts/apply_patches.py b/scripts/apply_patches.py
+index 7e5801b..2ebd23e 100644
+--- a/scripts/apply_patches.py
++++ b/scripts/apply_patches.py
+@@ -11,7 +11,11 @@ target location.
+ Target files are staged on tmpfs so each patch reads/writes the staged copy,
+ and only one real disk write happens per target at the end.
+ 
+-Usage: apply_patches.py <patches_dir> <app_dir>
++Usage: apply_patches.py [--windows] <patches_dir> <app_dir>
++
++--windows applies the Windows build's set instead (scripts/windows/
++build-windows.sh): the WINDOWS_PATCH_SET patches from the category subdirs,
++then every patch in patches/windows/, which no Linux build discovers.
+ 
+ <app_dir> is the directory that contains app.asar.contents/, i.e. the same
+ path that build-patched-tarball.sh uses as "$WORK_DIR/app".
+@@ -35,6 +39,40 @@ PATCH_SUBDIRS = ("linux", "core", "community")
+ # remove a patch.
+ EXPECTED_PATCH_COUNT = 76
+ 
++# The Windows build (--windows). patches/windows/ holds the Windows-only
++# patches; they are applied AFTER the shared ones (on a shared target, their
++# prefix injections then land ahead of the others). Pinned like
++# EXPECTED_PATCH_COUNT.
++WINDOWS_SUBDIR = "windows"
++EXPECTED_WINDOWS_PATCH_COUNT = 3
++# Shared patches the Windows build carries: every core and community feature
++# except Linux window handling (window controls, native titlebar, window
++# transparency), the Quick Entry socket and the Linux profile launcher's URL
++# routing (patches/windows/ does that on Windows). Linux fixes stay out.
++WINDOWS_PATCH_SET = (
++    "add_feature_allow_non_anthropic_models",
++    "add_feature_auto_archive_grace",
++    "add_feature_auto_archive_grace_web",
++    "add_feature_custom_models",
++    "add_feature_custom_themes",
++    "add_feature_dev_tools_toggle",
++    "add_feature_diff_views",
++    "add_feature_diff_views_bridge",
++    "add_feature_extra_settings",
++    "add_feature_extra_settings_bridge",
++    "add_feature_files_quick_open",
++    "add_feature_files_quick_open_bridge",
++    "add_feature_files_quick_open_worker",
++    "add_feature_jira_tracker",
++    "add_feature_panel_tabs",
++    "add_feature_panel_tabs_bridge",
++    "add_feature_theme_picker",
++    "add_feature_transcript_limits",
++    "add_feature_transcript_limits_worker",
++    "add_growthbook_overrides",
++    "fix_profile_window_title",
++)
++
+ # Byte strings that only ever appear in a bundle one of our builds already
+ # patched: every injected identifier starts with `__cdb`, and
+ # `__nav_spoof_applied` is the marker of the navigator spoof removed for issue
+@@ -214,12 +252,58 @@ def run_nim_patch(nim_bin: Path, target_file: Path) -> bool:
+         return False
+ 
+ 
++def select_windows_sources(patches_dir: Path, sources):
++    """The Windows build's patches: WINDOWS_PATCH_SET, then patches/windows/."""
++    by_stem = {pf.stem: (pf, t, ty) for pf, t, ty in sources}
++    missing = [n for n in WINDOWS_PATCH_SET if n not in by_stem]
++    if missing:
++        print(
++            f"[ERROR] WINDOWS_PATCH_SET names patch(es) that do not exist: "
++            f"{', '.join(missing)}",
++            file=sys.stderr,
++        )
++        sys.exit(1)
++    # Keep the shared patches in their usual (basename) order.
++    shared = [s for s in sources if s[0].stem in WINDOWS_PATCH_SET]
++    win_dir = patches_dir / WINDOWS_SUBDIR
++    if not win_dir.is_dir():
++        print(f"[ERROR] Missing patch directory: {win_dir}", file=sys.stderr)
++        sys.exit(1)
++    own = []
++    for pf in sorted((p for p in win_dir.iterdir() if p.is_file()), key=lambda p: p.name):
++        target_spec, ptype = parse_headers(pf)
++        if target_spec and ptype:
++            own.append((pf, target_spec, ptype))
++    if len(own) != EXPECTED_WINDOWS_PATCH_COUNT:
++        print(
++            f"\n[ERROR] Discovered {len(own)} Windows patch source(s) in "
++            f"{win_dir}, expected {EXPECTED_WINDOWS_PATCH_COUNT}.\n"
++            "        If you added or removed one, update "
++            "EXPECTED_WINDOWS_PATCH_COUNT in this script.",
++            file=sys.stderr,
++        )
++        sys.exit(1)
++    print(
++        f"  Windows build: {len(shared)} shared patch(es) + {len(own)} "
++        f"Windows patch(es)"
++    )
++    return shared + own
++
++
+ def main():
+-    if len(sys.argv) != 3:
+-        print("Usage: apply_patches.py <patches_dir> <app_dir>", file=sys.stderr)
++    args = sys.argv[1:]
++    windows = False
++    if args[:1] == ["--windows"]:
++        windows = True
++        args = args[1:]
++    if len(args) != 2:
++        print(
++            "Usage: apply_patches.py [--windows] <patches_dir> <app_dir>",
++            file=sys.stderr,
++        )
+         sys.exit(1)
+-    patches_dir = Path(sys.argv[1]).resolve()
+-    app_dir = Path(sys.argv[2]).resolve()
++    patches_dir = Path(args[0]).resolve()
++    app_dir = Path(args[1]).resolve()
+ 
+     if not patches_dir.is_dir():
+         print(f"[ERROR] patches_dir not found: {patches_dir}", file=sys.stderr)
+@@ -268,6 +352,9 @@ def main():
+         )
+         sys.exit(1)
+ 
++    if windows:
++        sources = select_windows_sources(patches_dir, sources)
++
+     replace_jobs = []  # list[(patch_file, real_target)]
+     nim_jobs_by_target = {}  # real_target -> list[(patch_file, nim_binary)]
+ 
+diff --git a/scripts/run-feature-tests.sh b/scripts/run-feature-tests.sh
+index 5caea23..e64a3a9 100644
+--- a/scripts/run-feature-tests.sh
++++ b/scripts/run-feature-tests.sh
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env bash
+-# Run every feature test harness under scripts/tests/{community,core}/.
++# Run every feature test harness under scripts/tests/{community,core,linux,windows}/.
+ #
+ # WHY THIS EXISTS
+ # ---------------
+@@ -19,6 +19,7 @@
+ #   scripts/run-feature-tests.sh community    # one category only
+ #   scripts/run-feature-tests.sh core
+ #   scripts/run-feature-tests.sh linux
++#   scripts/run-feature-tests.sh windows
+ 
+ set -uo pipefail
+ 
+@@ -34,17 +35,25 @@ EXPECTED_TEST_HARNESSES=103
+ CATEGORIES=(community core linux)
+ 
+ usage() {
+-    echo "Usage: $(basename "$0") [community|core|linux]" >&2
++    echo "Usage: $(basename "$0") [community|core|linux|windows]" >&2
+     exit 2
+ }
+ 
+ case "${1-}" in
+     "")            ENFORCE_COUNT=true ;;
+-    community|core|linux) CATEGORIES=("$1"); ENFORCE_COUNT=false ;;
++    community|core|linux|windows) CATEGORIES=("$1"); ENFORCE_COUNT=false ;;
+     -h|--help)     usage ;;
+     *)             echo "[ERROR] Unknown category: $1" >&2; usage ;;
+ esac
+ 
++# The Windows build's own harnesses (scripts/tests/windows/) run with the full
++# suite, on top of upstream's count. Kept off upstream's count and category
++# lines so that upstream adding a harness does not break this overlay.
++if [ "$ENFORCE_COUNT" = true ]; then
++    CATEGORIES+=(windows)
++    EXPECTED_TEST_HARNESSES=$((EXPECTED_TEST_HARNESSES + 7))
++fi
++
+ if ! command -v node >/dev/null 2>&1; then
+     echo "[ERROR] node is required to run the feature test harnesses" >&2
+     exit 1

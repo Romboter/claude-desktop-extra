@@ -1,0 +1,135 @@
+diff --git a/js/auto_archive_grace_web_main.js b/js/auto_archive_grace_web_main.js
+index da0cf33..6050928 100644
+--- a/js/auto_archive_grace_web_main.js
++++ b/js/auto_archive_grace_web_main.js
+@@ -15,9 +15,16 @@
+  */
+ ;/*__CDB_ARCHIVE_GRACE_WEB__*/(function () {
+   "use strict";
+-  if (typeof process === "undefined" || process.platform !== "linux") return;
++  if (typeof process === "undefined" || (process.platform !== "linux" && process.platform !== "win32")) return;
+   if (globalThis.__cdbArchiveGraceWebMain) return;
+   globalThis.__cdbArchiveGraceWebMain = true;
++  // Windows build: one startup line for the smoke test, once the app is ready.
++  (function (app) {
++    if (!app || typeof app.whenReady !== "function") return;
++    app.whenReady().then(function () {
++      setTimeout(function () { try { (globalThis.__cdbDiag || function () {})("[archive-grace] installed (main)"); } catch (e) {} }, 0);
++    }, function () {});
++  })(require("electron").app);
+ 
+   var _electron = require("electron");
+   var _URL = require("url").URL;
+diff --git a/patches/community/add_feature_auto_archive_grace.nim b/patches/community/add_feature_auto_archive_grace.nim
+index 1166c31..cda8e22 100644
+--- a/patches/community/add_feature_auto_archive_grace.nim
++++ b/patches/community/add_feature_auto_archive_grace.nim
+@@ -92,17 +92,17 @@ proc apply*(input: string): string =
+   let inactive = input[heads.group(2)]
+ 
+   let observe =
+-    "if(process.platform===\"linux\")await this.__cdbGrace().wait(" & session & "," &
++    "if((process.platform===\"linux\"||process.platform===\"win32\"))await this.__cdbGrace().wait(" & session & "," &
+     state & ");return"
+   let guard =
+-    "if(process.platform===\"linux\"&&!" & unconfirmed & "&&(" & state &
++    "if((process.platform===\"linux\"||process.platform===\"win32\")&&!" & unconfirmed & "&&(" & state &
+     "===\"merged\"||" & state & "===\"closed\")&&await this.__cdbGrace().wait(" & session &
+     "," & state & "))return;"
+   let lateGate =
+-    "if(process.platform===\"linux\"&&!" & inactive & "&&" & unconfirmed &
++    "if((process.platform===\"linux\"||process.platform===\"win32\")&&!" & inactive & "&&" & unconfirmed &
+     "&&await this.__cdbGrace().wait(" & session & "," & state & "))return;"
+   let shortcut =
+-    "if(process.platform===\"linux\"&&this.terminalVerdict(" & session & ".sessionId," &
++    "if((process.platform===\"linux\"||process.platform===\"win32\")&&this.terminalVerdict(" & session & ".sessionId," &
+     own & "," & now & ").terminal&&this.__cdbGrace().pending(" & session & "))return;"
+ 
+   let sweepHead = re2"async sweep\(([\w$]+)=!1\)\{"
+@@ -110,7 +110,7 @@ proc apply*(input: string): string =
+   let kicked = input[sweeps.group(0)]
+   let sweepWrapper =
+     "async sweep(" & kicked &
+-    "=!1){let __cdbOwn=process.platform===\"linux\"&&!this.sweeping;__cdbOwn&&this.__cdbGrace().begin();try{return await this.__cdbOriginalArchiveSweep(" &
++    "=!1){let __cdbOwn=(process.platform===\"linux\"||process.platform===\"win32\")&&!this.sweeping;__cdbOwn&&this.__cdbGrace().begin();try{return await this.__cdbOriginalArchiveSweep(" &
+     kicked &
+     ")}finally{__cdbOwn&&!this.sweeping&&await this.__cdbGrace().reconcileAll()}}async __cdbOriginalArchiveSweep(" &
+     kicked & "=!1){"
+@@ -121,7 +121,7 @@ proc apply*(input: string): string =
+     "confirmed-reopen",
+   )
+   let cancel =
+-    "process.platform===\"linux\"&&this.__cdbGrace().cancel(" & input[reopens.group(0)] &
++    "(process.platform===\"linux\"||process.platform===\"win32\")&&this.__cdbGrace().cancel(" & input[reopens.group(0)] &
+     ".sessionId),"
+ 
+   # What C, D, E and G sit in front of; asserted on the patched result too.
+diff --git a/patches/community/add_feature_auto_archive_grace_ion.nim b/patches/community/add_feature_auto_archive_grace_ion.nim
+index e3679c8..1591ff9 100644
+--- a/patches/community/add_feature_auto_archive_grace_ion.nim
++++ b/patches/community/add_feature_auto_archive_grace_ion.nim
+@@ -261,6 +261,7 @@ when isMainModule:
+       raise newException(ValueError, "injection incomplete or stale")
+     writeFile(noticePath, noticeOutput)
+     writeFile(railPath, railOutput)
+-  except ValueError as e:
++  except CatchableError as e:
++    # ValueError from an anchor, or an IOError reading the vendor-frame bundle.
+     quit("[FAIL] archive grace UI: " & e.msg, 1)
+   echo "[OK] archive grace UI: notice and session rail verified"
+diff --git a/scripts/tests/community/test-auto-archive-grace.mjs b/scripts/tests/community/test-auto-archive-grace.mjs
+index 2f1c5dc..4b0a0ae 100644
+--- a/scripts/tests/community/test-auto-archive-grace.mjs
++++ b/scripts/tests/community/test-auto-archive-grace.mjs
+@@ -217,7 +217,7 @@ await test("injected: a null lookup between sweeps keeps the deadline, OPEN clea
+   b.clock.now += 10 * 60000; b.engine.state = "open"; await b.check();
+   b.clock.now += 10 * 60000; b.engine.state = "merged"; assert.equal(await b.check(), "lookup", "after OPEN a re-merge starts a fresh grace");
+ });
+-await test("injected: confirmed reopen cancels the old clock and a stale CLOSED gets a fresh grace; inactivity, win32, immediate unchanged", async () => {
++await test("injected: confirmed reopen cancels the old clock and a stale CLOSED gets a fresh grace; inactivity, darwin, immediate unchanged; win32 holds like linux (Windows build)", async () => {
+   const { h, engine, clock, context, check } = patchedEngine();
+   assert.equal(await check(), "");
+   clock.now += 14 * 60000; engine.freshReopen(h.session, [{}]); h.session.prs[0].state = "CLOSED";
+@@ -225,14 +225,15 @@ await test("injected: confirmed reopen cancels the old clock and a stale CLOSED
+   assert.equal(await check(), "", "the CLOSED binding got its own new grace");
+   assert.equal(await check(true), "inspect,archive", "inactivity is unchanged");
+   await engine.sweep(); assert.equal(engine.calls.includes("sweep"), true);
+-  context.process.platform = "win32"; assert.equal(await check(), "share,remembered,inspect,archive");
++  context.process.platform = "win32"; assert.equal(await check(), "", "win32 holds like linux");
++  context.process.platform = "darwin"; assert.equal(await check(), "share,remembered,inspect,archive");
+   const zero = patchedEngine(0); assert.equal(await zero.check(), "share,remembered,inspect,archive", "immediate is upstream");
+ });
+ 
+ await test("settings IPC: default, persistence, jsonc lock, validation and untouched unrelated preferences", async () => {
+   const extra = path.join(ROOT, "patches/core/add_feature_extra_settings"); fs.accessSync(extra, fs.constants.X_OK);
+   const require2 = createRequire(import.meta.url), Module = require2("module");
+-  for (const platform of ["linux", "win32"]) {
++  for (const platform of ["linux", "win32"]) { // extra_settings_main never loads on darwin; win32 works like linux (Windows build)
+     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cdb-grace-settings-")), file = path.join(dir, "extra.cjs");
+     try {
+       fs.writeFileSync(file, 'function FHa(e=[]){let t=G().type==="3p"&&ou()==="1p"?[...e,j$t]:e;a.app.isPackaged?Mj(!0,t):fj(t)}\n' + 'var Hrr,Urr;function Yrr(){return Urr??=(async()=>{let t,n,r,s;return Hrr={qemuPath:t,firmwarePath:n,virtiofsdPath:r,virtiofsdAptInstallable:!0,kvm:s},Hrr})(),Urr}function Xrr(){return Hrr}\n' + 'function nav0(){let Uy=go(Hy,"Navigation",Xy,{events:[["navigate",[["path",I]]]]});return Uy}\n');
+@@ -246,7 +247,6 @@ await test("settings IPC: default, persistence, jsonc lock, validation and untou
+       try { require2(file); } finally { Module._load = original; Object.defineProperty(process, "platform", descriptor); }
+       const event = { sender: { isDestroyed: () => false, getURL: () => "https://claude.ai/settings" }, senderFrame: { parent: null } };
+       const call = (channel, ...args) => handlers["cdb-archive-grace:" + channel](event, ...args);
+-      if (platform === "win32") { assert.equal((await call("set", 15)).ok, false); assert.equal(globalThis.__cdbAutoArchiveMergeDelayMinutes, undefined); continue; }
+       assert.equal((await call("read")).minutes, 0);
+       const json = path.join(userData, "claude-desktop-extra.json"), jsonc = path.join(userData, "claude-desktop-extra.jsonc");
+       const unrelated = { autoFixTrustedAuthors: ["github.com/my-app[bot]"], other: true };
+@@ -595,14 +595,14 @@ const webMainSource = () => {
+ };
+ await test("web main: runs the page script on dom-ready in claude.ai pages only, linux only; refresh re-runs it", async () => {
+   const code = webMainSource();
+-  for (const platform of ["linux", "win32"]) {
++  for (const platform of ["linux", "win32", "darwin"]) {
+     let created = null; const all = [];
+     const wc = url => { const c = { url, ran: [], handlers: {}, isDestroyed: () => false, getURL() { return c.url; },
+       on(ev, fn) { c.handlers[ev] = fn; }, executeJavaScript(src) { c.ran.push(src); return Promise.resolve(); } }; all.push(c); return c; };
+     const electron = { app: { on: (ev, fn) => { if (ev === "web-contents-created") created = fn; } }, webContents: { getAllWebContents: () => all } };
+     const g = { process: { platform }, require: id => id === "electron" ? electron : require2(id) };
+     g.globalThis = g; vm.runInNewContext(code, g);
+-    if (platform === "win32") { assert.equal(created, null); assert.equal(g.__cdbArchiveGraceWebRefresh, undefined); continue; }
++    if (platform === "darwin") { assert.equal(created, null); assert.equal(g.__cdbArchiveGraceWebRefresh, undefined); continue; }
+     const pages = ["https://claude.ai/epitaxy/x", "https://preview.claude.ai/", "app://localhost/epitaxy", "https://claude.ai.evil.example/", "http://claude.ai/"].map(wc);
+     for (const p of pages) { created({}, p); p.handlers["dom-ready"](); }
+     assert.deepEqual(pages.map(p => p.ran.length), [1, 1, 0, 0, 0]);

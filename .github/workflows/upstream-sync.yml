@@ -6,7 +6,7 @@ name: "Windows: Sync Upstream & Release"
 #
 #   1. sync     - git merge of upstream master into master. The fork only ADDS
 #                 files (its edits to upstream files live in
-#                 scripts/windows/upstream-overlay.patch), so this never
+#                 scripts/windows/overlay/*.patch), so this never
 #                 conflicts, except in .github/workflows/: upstream's Linux
 #                 workflows are not used here, and a conflict there is
 #                 resolved by keeping the fork's version.
@@ -98,7 +98,7 @@ jobs:
               # resolve every conflict there our way (keep ours, or stay deleted).
               conflicted=$(git diff --name-only --diff-filter=U)
               if grep -qv '^\.github/workflows/' <<<"$conflicted"; then
-                echo "::error::Sync conflict outside .github/workflows/ (a fork commit changed an upstream file; move that change into scripts/windows/upstream-overlay.patch):"
+                echo "::error::Sync conflict outside .github/workflows/ (a fork commit changed an upstream file; move that change into a scripts/windows/overlay/ patch):"
                 echo "$conflicted"
                 exit 1
               fi
@@ -203,7 +203,7 @@ jobs:
           > The Upstream Sync workflow failed: ${RUN_URL}. Automatic runs are paused while this issue is open, so nothing rebuilds until you fix it and restart it yourself:
           >
           > 1. Read the run's logs and find the cause.
-          > 2. Fix it on a branch with a PR into the master branch of this fork, ${GITHUB_REPOSITORY} (gh pr create -R ${GITHUB_REPOSITORY} --base master), never to the upstream repositories. Follow AGENTS.md's patch strictness rules. If the Windows overlay no longer applies, re-fit scripts/windows/upstream-overlay.patch (see scripts/windows/prepare-sources.sh). If a Windows-set patch no longer matches the new bundle, re-fit it.
+          > 2. Fix it on a branch with a PR into the master branch of this fork, ${GITHUB_REPOSITORY} (gh pr create -R ${GITHUB_REPOSITORY} --base master), never to the upstream repositories. Follow AGENTS.md's patch strictness rules. If the Windows overlay no longer applies, re-fit the failing patch named in the error, in scripts/windows/overlay/ (see scripts/windows/prepare-sources.sh). If a Windows-set patch no longer matches the new bundle, re-fit it.
           > 3. When the PR's Build Windows checks are green, merge it.
           > 4. Only after that merge, start the rebuild: gh workflow run upstream-sync.yml -R ${GITHUB_REPOSITORY} -f force_build=true
           > 5. Watch that run (gh run list --workflow upstream-sync.yml --limit 1, then gh run watch with the run id). A green run publishes the Windows release and closes this issue by itself. Do not close the issue by hand.
