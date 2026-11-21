@@ -801,7 +801,7 @@ index 5caea23..e357bae 100644
      echo "[ERROR] node is required to run the feature test harnesses" >&2
      exit 1
 diff --git a/scripts/tests/community/test-auto-archive-grace.mjs b/scripts/tests/community/test-auto-archive-grace.mjs
-index 2f1c5dc..ca29123 100644
+index 2f1c5dc..4b0a0ae 100644
 --- a/scripts/tests/community/test-auto-archive-grace.mjs
 +++ b/scripts/tests/community/test-auto-archive-grace.mjs
 @@ -217,7 +217,7 @@ await test("injected: a null lookup between sweeps keeps the deadline, OPEN clea
@@ -839,38 +839,7 @@ index 2f1c5dc..ca29123 100644
        assert.equal((await call("read")).minutes, 0);
        const json = path.join(userData, "claude-desktop-extra.json"), jsonc = path.join(userData, "claude-desktop-extra.jsonc");
        const unrelated = { autoFixTrustedAuthors: ["github.com/my-app[bot]"], other: true };
-@@ -376,6 +376,30 @@ await test("ion patch: PR bar row in its own chunk (v6.28899.2) resolves jsxs /
-     finally { fs.rmSync(r.dir, { recursive: true, force: true }); }
-   }
- });
-+// Anthropic's Windows 6.28899 shape: the preference callback registers through a
-+// helper (no onPreferencesChanged), and the notice chunk has no PR bar row, so
-+// jsxs / Fragment are verified against the vendor-frame jsx-runtime exports. A
-+// second six-child jsxs call whose first argument is NOT the Fragment export (a
-+// ViewTransition) must not be taken for it.
-+const vendorFixture = "var ce={},le=ce.Fragment,q=ce.jsx,ue=ce.jsxs;export{le as Wa,q as Ga,ue as Ka,vt as Ba,x as To,y as go};";
-+const windowsNotice = noticeFixture
-+  .replace("Zn?.onPreferencesChanged?.(t)", "Ki(t)")
-+  .replace("go as eff,", "go as eff,Ba as ViewT,")
-+  .replace(/function Row\(e,t\)\{let \$=Q7\(441\),\{repoKey:n,sessionRef:r,sessionRepo:i,isPrimary:a,inRail:D\}=e;/,
-+    "var Row=memo(function(e){let $=Q7(441),{item:n}=e;")
-+  .replace("$[440]}", "$[440]})")
-+  .concat("\nfunction Decoy(e){return J5($,75,u,d)?K5($,75,u,d,jxs(ViewT,{children:[u,d,c,p,m,g]})):$[81]}");
-+await test("ion patch: Windows shapes - helper-registered subscriber, jsxs/Fragment from the vendor-frame runtime, not the ViewTransition decoy", async () => {
-+  const extra = { "vendor-frame-test.js": vendorFixture };
-+  const out = checkIon(windowsNotice, railFixture, extra);
-+  for (const alias of ["= st(null)", "eff(() =>", "jxs(Frag, {children:"]) assert.ok(out.notice.includes(alias), "notice helper uses " + alias);
-+  const noVendor = runIon(windowsNotice, railFixture);
-+  try { assert.notEqual(noVendor.run.status, 0, "the vendor bundle is required on this path"); assert.match(noVendor.run.stdout + noVendor.run.stderr, /\[FAIL\]/); }
-+  finally { fs.rmSync(noVendor.dir, { recursive: true, force: true }); }
-+  const wrongExport = runIon(windowsNotice, railFixture, { "vendor-frame-test.js": vendorFixture.replace("le as Wa", "le as Zz") });
-+  try { assert.notEqual(wrongExport.run.status, 0, "Fragment no longer exported under the imported name"); assert.match(wrongExport.run.stdout + wrongExport.run.stderr, /\[FAIL\]/); }
-+  finally { fs.rmSync(wrongExport.dir, { recursive: true, force: true }); }
-+});
- await test("ion wrappers: the keep control is appended inside the rail's aside, ref/key kept; the notice wrapper passes hold and class", async () => {
-   const out = checkIon(noticeFixture, railFixture);
-   const ctx = { o: (type, props, key) => ({ type, props, key: key ?? null }), c: (type, props, key) => ({ type, props, key: key ?? null }),
-@@ -595,14 +619,14 @@ const webMainSource = () => {
+@@ -595,14 +595,14 @@ const webMainSource = () => {
  };
  await test("web main: runs the page script on dom-ready in claude.ai pages only, linux only; refresh re-runs it", async () => {
    const code = webMainSource();
