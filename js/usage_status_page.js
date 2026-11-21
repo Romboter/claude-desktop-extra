@@ -484,6 +484,16 @@
     return { text: summary.textContent.trim(), pct: Number.isFinite(pct) ? clamp(pct, 0, 100) : null, compact, bar };
   }
 
+  function linkButton(className, text, onClick) {
+    const button = element('button', 'up-link ' + className, text);
+    button.type = 'button';
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onClick();
+    });
+    return button;
+  }
+
   // Same markup and classes as the rows of Claude's popover; only the bar is
   // drawn by widget.css.
   function buildContext() {

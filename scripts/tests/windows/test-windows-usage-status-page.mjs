@@ -56,7 +56,7 @@ const FETCHES = {
         : Promise.resolve(J({limits:[{kind:"session",percent:30,resets_at:R(2.5*3600e3)}]}))`
 };
 
-function fixture(runs, fetchKind, probe) {
+function fixture(runs, fetchKind, probe, extra = "") {
   const scripts = runs.map((enabled) =>
     `<script>var __CDB_USAGE_STATUS_OPTS={enabled:${enabled}};${PAGE.replace(/<\/script/g, "<\\/script")}</script>`).join("\n");
   return `<!doctype html><html lang="en"><head><style>${CSS}</style></head><body>
@@ -67,6 +67,7 @@ function fixture(runs, fetchKind, probe) {
     <div data-row data-row-key="b"><button data-row-main-button><span class="df-leading-slot"></span><span data-row-label>Same title</span></button></div>
   </div>
 </div>
+${extra}
 <pre id="probe"></pre>
 <script>
 var J = (o) => ({ ok: true, json: () => Promise.resolve(o) });
@@ -84,9 +85,9 @@ setTimeout(function () {
 </script></body></html>`;
 }
 const dir = mkdtempSync(join(tmpdir(), "cdb-usage-"));
-function run(name, runs, kind, probe) {
+function run(name, runs, kind, probe, extra) {
   const file = join(dir, name + ".html");
-  writeFileSync(file, fixture(runs, kind, probe));
+  writeFileSync(file, fixture(runs, kind, probe, extra));
   const lines = readProbe(dumpDom(chromium, file, ["--window-size=900,700"]), "probe");
   if (!lines) { ok(false, name + ": page produced no probe output"); return; }
   for (const l of lines) ok(l.startsWith("PASS"), name + ": " + l.replace(/^(PASS|FAIL) /, ""));
@@ -113,6 +114,18 @@ run("session-only", [true], "sessionOnly",
 run("duplicate-titles", [true], "ok",
   `var a = document.querySelector('[data-row-key=a]'), b = document.querySelector('[data-row-key=b]');
    ok(a.querySelector("[data-up-session]") !== null && b.querySelector("[data-up-session]") !== null, "rows with one title are both marked");`);
+
+// Claude's usage popover with the rail's Context card mounted.
+const POPOVER = `<div id="portal-root"><div data-cds="Popover"><div class="hdr"><a href="/settings/usage">Usage</a></div>
+  <div class="list"><div class="limits"><div data-cds="Meter"><span id="t1">Session limit</span><div role="meter" aria-labelledby="t1"></div></div></div></div></div></div>
+<section><div data-rail-context-summary data-rail-context-pct="42">42% of context</div><div data-cds="StackedMeter"></div><button type="button">Compact session</button></section>`;
+run("popover", [true], "ok",
+  `ok(${q(".up-context")} === 1, "popover: the session's context block is drawn");
+   ok(document.querySelector(".up-context-action").textContent === "Compact session", "popover: Compact session button mirrors the rail's");
+   ok(document.querySelector(".up-popover-pace").textContent === "10% over pace", "popover: pace beside the header");
+   ok(${q(".up-time.up-in-popover")} === 1, "popover: time line above the session meter");`, POPOVER);
+run("popover-off", [true, false], "ok",
+  `ok(${q(".up-context, .up-popover-pace, .up-time")} === 0, "popover: teardown removes context, pace and time lines");`, POPOVER);
 
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed`);
