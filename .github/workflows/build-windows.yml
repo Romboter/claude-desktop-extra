@@ -215,9 +215,7 @@ jobs:
     if: ${{ inputs.publish }}
     needs: [build, smoke-test]
     runs-on: ubuntu-24.04
-    # Publishing waits for a reviewer: create the environment "windows-release"
-    # with required reviewers in Settings > Environments (see docs/windows.md).
-    environment: windows-release
+    # Publishes automatically once build and smoke test pass (no approval gate).
     permissions:
       contents: write
     steps:

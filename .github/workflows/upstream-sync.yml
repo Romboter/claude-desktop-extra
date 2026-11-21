@@ -4,10 +4,12 @@ name: "Windows: Sync Upstream & Release"
 # and publish a new Windows build when anything moved. A run with nothing new
 # is cheap: merge, read RELEASES, decide, stop.
 #
-#   1. sync     - GitHub's own "Sync fork" (merge-upstream API) on master. The
-#                 fork only ADDS files (its edits to upstream files live in
+#   1. sync     - git merge of upstream master into master. The fork only ADDS
+#                 files (its edits to upstream files live in
 #                 scripts/windows/upstream-overlay.patch), so this never
-#                 conflicts.
+#                 conflicts, except in .github/workflows/: upstream's Linux
+#                 workflows are not used here, and a conflict there is
+#                 resolved by keeping the fork's version.
 #   2. build    - when upstream moved, or Anthropic's Windows version (the
 #                 RELEASES feed) is HIGHER than the highest published
 #                 windows-v release: Build Windows (build x64 + arm64, boot the
@@ -69,27 +71,47 @@ jobs:
           n=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search 'in:title "Automatic update failed"' --json number -q '.[0].number // empty' 2>/dev/null || true)
           echo "issue=${n}" >> "$GITHUB_OUTPUT"
 
+      - name: Check out master
+        if: ${{ steps.failing.outputs.issue == '' || inputs.force_build }}
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+
       - name: Sync master with upstream
         id: sync
         # Paused (failure issue open): leave master where it is. A by-hand run
         # with force_build ticked goes ahead.
         if: ${{ steps.failing.outputs.issue == '' || inputs.force_build }}
-        env:
-          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
         run: |
           set -uo pipefail
-          resp=$(gh api -X POST "repos/${GITHUB_REPOSITORY}/merge-upstream" -f branch=master 2>&1)
-          rc=$?
-          echo "$resp"
-          if [ "$rc" -ne 0 ]; then
-            if grep -qi 'workflow' <<<"$resp"; then
-              echo "::error::Upstream changed files under .github/workflows/, which the default token may not push. Add a SYNC_TOKEN secret (see the header of this workflow)."
-            else
-              echo "::error::Sync fork failed (a conflict means a fork commit changed an upstream file; move that change into scripts/windows/upstream-overlay.patch)."
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/patrickjaja/claude-desktop-extra.git
+          git fetch -q upstream master
+          type=none
+          if ! git merge-base --is-ancestor upstream/master HEAD; then
+            type=merge
+            if ! git merge --no-edit upstream/master; then
+              # Upstream's .github/workflows/ files are not used on this fork:
+              # resolve every conflict there our way (keep ours, or stay deleted).
+              conflicted=$(git diff --name-only --diff-filter=U)
+              if grep -qv '^\.github/workflows/' <<<"$conflicted"; then
+                echo "::error::Sync conflict outside .github/workflows/ (a fork commit changed an upstream file; move that change into scripts/windows/upstream-overlay.patch):"
+                echo "$conflicted"
+                exit 1
+              fi
+              while IFS= read -r f; do
+                git checkout --ours -- "$f" 2>/dev/null && git add -- "$f" || git rm -q -- "$f"
+              done <<<"$conflicted"
+              git commit --no-edit -q
             fi
-            exit 1
+            if ! git push origin HEAD:master; then
+              echo "::error::Could not push the merge. If upstream changed .github/workflows/, add a SYNC_TOKEN secret (see the header of this workflow)."
+              exit 1
+            fi
           fi
-          type=$(jq -r '.merge_type // "none"' <<<"$resp")
           echo "merge_type=${type}" >> "$GITHUB_OUTPUT"
           echo "Sync: ${type}" >> "$GITHUB_STEP_SUMMARY"
 

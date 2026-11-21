@@ -141,6 +141,6 @@ This fork follows [patrickjaja/claude-desktop-extra](https://github.com/patrickj
 
 ## Release safeguards
 
-- **Approval before publishing:** the publish job uses the environment `windows-release`. Create it in Settings > Environments and add yourself as a required reviewer, otherwise the gate does nothing. Scheduled syncs then wait for your approval before a release goes out.
+- **Publishing:** the publish job runs automatically once the build and both smoke tests pass; there is no approval gate. A failed build or smoke test publishes nothing and opens the "Automatic update failed" issue.
 - **Anthropic's signature:** CI keeps the original `claude.exe` and the Windows smoke test fails unless it has a valid Authenticode signature from Anthropic, PBC. Our patched exe is unsigned.
 - **Update notice:** the build stamps the update notice with the repository it runs in (`GITHUB_REPOSITORY`, or the origin remote), so a fork's users are pointed at the fork's releases.
