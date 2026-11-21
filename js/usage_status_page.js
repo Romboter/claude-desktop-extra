@@ -30,7 +30,7 @@
     en: {
       title: 'Usage',
       fiveHour: 'Session limit',
-      weekly: (name) => 'Weekly · ' + name,
+      weekly: (name) => 'Weekly \u00b7 ' + name,
       allModels: 'all models',
       hoursMinutes: (h, m) => (h > 0 ? h + ' hr ' : '') + m + ' min',
       over: (d) => d + '% over pace',
@@ -47,10 +47,10 @@
     de: {
       title: 'Nutzung',
       fiveHour: 'Sitzungslimit',
-      weekly: (name) => 'Wöchentlich · ' + name,
+      weekly: (name) => 'W\u00f6chentlich \u00b7 ' + name,
       allModels: 'alle Modelle',
       hoursMinutes: (h, m) => (h > 0 ? h + ' Std. ' : '') + m + ' Min.',
-      over: (d) => d + ' % über Plan',
+      over: (d) => d + ' % \u00fcber Plan',
       under: (d) => d + ' % unter Plan',
       onPace: 'Im Plan',
       badges: { awaiting: 'Wartet', ready: 'Fertig', error: 'Fehler' },
@@ -112,7 +112,7 @@
         ? null
         : { shared: Math.min(used, elapsed), end: Math.max(used, elapsed), over: used > elapsed };
       const reset = formatReset(resetAt, limit.kind, now, strings, locale);
-      return [{ kind: limit.kind, model, label, used, time, meta: (reset ? reset + ' · ' : '') + used + '%' }];
+      return [{ kind: limit.kind, model, label, used, time, meta: (reset ? reset + ' \u00b7 ' : '') + used + '%' }];
     });
     return { rows, pace };
   }
@@ -376,7 +376,7 @@
   // Claude's popover titles the weekly limit for all models just "Weekly".
   const POPOVER_TITLES = {
     session: /^(Session limit|Sitzungslimit|5-Stunden-Limit)$/i,
-    weekly_all: /^(Weekly|Wöchentlich)( · (all models|alle Modelle))?$/i,
+    weekly_all: /^(Weekly|W\u00f6chentlich)( \u00b7 (all models|alle Modelle))?$/i,
   };
 
   function rowTitled(title) {
@@ -469,7 +469,7 @@
   // headline with data-rail-context-summary and data-rail-context-pct, so the
   // popover mirrors it above the limits, with a button that presses the
   // card's own, and a copy of the card's bar colored by what fills the
-  // context (messages, tools, skills…). With the rail hidden, the button
+  // context (messages, tools, skills...). With the rail hidden, the button
   // shows the rail instead.
   const COMPACT = /^(Compact session|Sitzung komprimieren)$/i;
   const SHOW_RAIL = 'button[aria-label="Show session rail"], button[aria-label="Sitzungsleiste anzeigen"]';

@@ -101,8 +101,25 @@ index 3214c79..93578a6 100644
      // A NUL cannot survive an argv element and a newline in a path is
      // pathological; spaces are deliberately ALLOWED, because "my notes.md" is an
      // ordinary tracked file and rejecting it would drop that one file back to the
+diff --git a/js/extra_settings_bridge.js b/js/extra_settings_bridge.js
+index 3081a1b..bca4455 100644
+--- a/js/extra_settings_bridge.js
++++ b/js/extra_settings_bridge.js
+@@ -63,6 +63,12 @@
+     githubAlertsSet: function (enabled) {
+       return ipcRenderer.invoke("cdb-github-alerts:set", enabled === true);
+     },
++    usageStatusRead: function () {
++      return ipcRenderer.invoke("cdb-usage-status:read");
++    },
++    usageStatusSet: function (enabled) {
++      return ipcRenderer.invoke("cdb-usage-status:set", enabled === true);
++    },
+     githubAlertIconsRead: function () {
+       return ipcRenderer.invoke("cdb-alert-icons:read");
+     },
 diff --git a/js/extra_settings_main.js b/js/extra_settings_main.js
-index 82461c4..ac980d3 100644
+index 82461c4..4498ef0 100644
 --- a/js/extra_settings_main.js
 +++ b/js/extra_settings_main.js
 @@ -477,7 +477,7 @@
@@ -123,7 +140,37 @@ index 82461c4..ac980d3 100644
      return /-3p$/.test(ud) ? ud : ud + "-3p";
    }
  
-@@ -4624,8 +4626,6 @@
+@@ -3773,6 +3775,29 @@
+       if (typeof globalThis.__cdbGithubAlertsRefresh === "function") globalThis.__cdbGithubAlertsRefresh();
+       return { ok: true, enabled: enabled, path: res.path };
+     },
++    // Usage and session status (Windows build: patches/windows/add_usage_status.nim).
++    // The module reads the key on every page load; the set handler saves it and
++    // asks the main half to re-run the page script in open windows.
++    "cdb-usage-status:read": function () {
++      var p = __cdbEx_paths();
++      var jsonc = __cdbEx_readFileKey(p.jsonc, "usageStatus");
++      var json = __cdbEx_readFileKey(p.json, "usageStatus");
++      return { ok: true, enabled: (jsonc === undefined ? json : jsonc) === true,
++        lockedByJsonc: jsonc !== undefined ? true : null };
++    },
++    "cdb-usage-status:set": function (enabled) {
++      if (typeof enabled !== "boolean") return { ok: false, error: "enabled must be a boolean" };
++      if (__cdbEx_readFileKey(__cdbEx_paths().jsonc, "usageStatus") !== undefined) {
++        return { ok: false, lockedByJsonc: true, error: "usageStatus is set in claude-desktop-extra.jsonc - edit that file to change it" };
++      }
++      var res = __cdbEx_writeCfg(function (cfg) {
++        if (enabled) cfg.usageStatus = true;
++        else delete cfg.usageStatus;
++      });
++      if (!res.ok) return res;
++      if (typeof globalThis.__cdbUsageStatusRefresh === "function") globalThis.__cdbUsageStatusRefresh();
++      return { ok: true, enabled: enabled, path: res.path };
++    },
+     // Reduced projection of the theme registry. cdb-themes:apply / :active stay
+     // owned by the theme picker patch; only this list is ours, because the full
+     // entries carry every token of every palette.
+@@ -4624,8 +4649,6 @@
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix author option is Linux only" }; };
        } else if (ch.indexOf("cdb-tray:") === 0) {
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the tray icon switch is Linux only" }; };
@@ -133,7 +180,7 @@ index 82461c4..ac980d3 100644
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix ready-to-merge wake is Linux only" }; };
        } else if (ch.indexOf("cdb-session-start:") === 0) {
 diff --git a/js/extra_settings_page.js b/js/extra_settings_page.js
-index 6e5f2ba..986a5a3 100644
+index 6e5f2ba..d9ec9b0 100644
 --- a/js/extra_settings_page.js
 +++ b/js/extra_settings_page.js
 @@ -588,12 +588,12 @@
@@ -166,7 +213,41 @@ index 6e5f2ba..986a5a3 100644
      restart.addEventListener("click", function () {
        restart.disabled = true;
        restart.textContent = "Restarting...";
-@@ -4170,6 +4170,28 @@
+@@ -3909,6 +3909,25 @@
+     });
+   }
+ 
++  function renderUsageStatusRow(panel) {
++    return renderToggleRow(panel, {
++      section: "Usage and sessions",
++      title: "Usage and session status",
++      note: "Shows your plan usage with weekly pace in the sidebar and the usage popover, a state badge " +
++        "(working, waiting, ready, error) on each session, and the session's context with Compact session in the " +
++        "popover. Ported from UI+ for Claude. Applies live to open chats.",
++      keywords: "usage pace limit weekly session status badge waiting ready context compact popover sidebar ui+",
++      ariaLabel: "Usage and session status",
++      read: "usageStatusRead", write: "usageStatusSet",
++      isOn: function (r) { return r.enabled === true; },
++      writeArg: function (on) { return on; },
++      describe: function (on) { return on ? "on - usage, pace and session badges shown" : "off - the app looks as shipped"; },
++      lockFile: "claude-desktop-extra.jsonc",
++      errorPrefix: "Could not change usage and session status: ",
++      toast: function (on) { return on ? "Usage and session status enabled" : "Usage and session status disabled"; }
++    });
++  }
++
+   function renderGithubAlertsRow(panel) {
+     return renderToggleRow(panel, {
+       section: "Chat appearance",
+@@ -4160,6 +4179,7 @@
+       renderFrostedReplyFieldRow,
+       renderGithubAlertsRow,
+       renderGithubAlertIconsRow,
++      renderUsageStatusRow,
+       renderDevToolsRow
+     ] },
+     { title: "Models and 3P", sub: "Extra models and gateway options", items: [
+@@ -4170,6 +4190,28 @@
        renderCuEscapeAbortRow
      ] }
    ];
@@ -177,7 +258,7 @@ index 6e5f2ba..986a5a3 100644
 +  if (/^Win/.test((typeof navigator !== "undefined" && navigator.platform) || "")) {
 +    var WINDOWS_ROWS = [renderDiffViewsRow, renderPanelTabsRow, renderFilesQuickOpenRow, renderCustomModelsRow,
 +      renderAllowNonAnthropicModelsRow, renderTranscriptLimitsRow, renderThemePickerRow, renderDevToolsRow,
-+      renderAutoArchiveGraceRow, renderJiraTrackerRow];
++      renderAutoArchiveGraceRow, renderJiraTrackerRow, renderUsageStatusRow];
 +    var keepWindowsRows = function (items) {
 +      var out = [];
 +      items.forEach(function (it) {
@@ -195,7 +276,7 @@ index 6e5f2ba..986a5a3 100644
  
    function renderFeatures(panel) {
      clear(panel);
-@@ -4616,7 +4638,7 @@
+@@ -4616,7 +4658,7 @@
  
  
        var files = el("div", "cdbx-note cdbx-models-files",
@@ -204,7 +285,7 @@ index 6e5f2ba..986a5a3 100644
          "Routing changes (a key, a model, a provider) reach open sessions at once through " + (st.paths && st.paths.routes) +
          ". New models show in the picker after the Code tab reloads. Sub-agent types, the default sub-agent " +
          "model, the small/fast model and the system-prompt line are handed to each session as it opens. A " +
-@@ -4934,7 +4956,7 @@
+@@ -4934,7 +4976,7 @@
        var url = field(form, "Base URL", input("text", existing ? existing.baseUrl : "", "https://api.example.com/anthropic"),
          "The Anthropic-compatible endpoint; /v1/messages is appended.");
        var key = field(form, "API key", input("password", "", existing && existing.keyOk ? "stored - type to replace" : "API key"),
@@ -213,7 +294,7 @@ index 6e5f2ba..986a5a3 100644
        var modelsUrl = field(form, "Models list URL", input("text", existing ? existing.modelsUrl || "" : "", "optional - found automatically"),
          "Where the provider lists its models (GET, OpenAI or Anthropic shape), on the base URL's host - the key " +
          "goes nowhere else. Left empty, fetch models tries the preset's address, then <base URL>/v1/models, " +
-@@ -5440,9 +5462,8 @@
+@@ -5440,9 +5482,8 @@
      var notice = el("div", "cdbx-notice");
      notice.appendChild(el("div", "cdbx-notice-title", "Changes here require a restart of Claude Desktop"));
      notice.appendChild(el("div", "cdbx-notice-body",
@@ -1124,7 +1205,7 @@ index 7e5801b..2ebd23e 100644
      nim_jobs_by_target = {}  # real_target -> list[(patch_file, nim_binary)]
  
 diff --git a/scripts/run-feature-tests.sh b/scripts/run-feature-tests.sh
-index 5caea23..8b50822 100755
+index 5caea23..e64a3a9 100755
 --- a/scripts/run-feature-tests.sh
 +++ b/scripts/run-feature-tests.sh
 @@ -1,5 +1,5 @@
@@ -1164,7 +1245,7 @@ index 5caea23..8b50822 100755
 +# lines so that upstream adding a harness does not break this overlay.
 +if [ "$ENFORCE_COUNT" = true ]; then
 +    CATEGORIES+=(windows)
-+    EXPECTED_TEST_HARNESSES=$((EXPECTED_TEST_HARNESSES + 6))
++    EXPECTED_TEST_HARNESSES=$((EXPECTED_TEST_HARNESSES + 7))
 +fi
 +
  if ! command -v node >/dev/null 2>&1; then
@@ -1412,10 +1493,10 @@ index 406b6a1..33c1ce4 100644
  const temp = fs.mkdtempSync(join(os.tmpdir(), "cdb-jira-send-"));
  const repo = join(temp, "repo"), link = join(temp, "repo-link"), plainDir = join(temp, "plain");
 diff --git a/scripts/tests/core/test-extra-settings-dom.mjs b/scripts/tests/core/test-extra-settings-dom.mjs
-index 878e76a..49455c1 100644
+index 878e76a..79668c4 100644
 --- a/scripts/tests/core/test-extra-settings-dom.mjs
 +++ b/scripts/tests/core/test-extra-settings-dom.mjs
-@@ -3746,11 +3746,33 @@ async function run() {
+@@ -3746,11 +3746,34 @@ async function run() {
    const box = navbox();
  
    // --- the Windows build: the page runs with navigator.platform "Win32" and
@@ -1444,7 +1525,8 @@ index 878e76a..49455c1 100644
 +      });
 +      ["load large Code sessions in full",
 +       "allow non-Anthropic models from a third-party gateway in the model list",
-+       "show the Jira issue tracker"].forEach(function (label) {
++       "show the Jira issue tracker",
++       "Usage and session status"].forEach(function (label) {
 +        ok(has(label), "Windows: the shipped row is there: " + label);
 +      });
 +      ok(!!(panel && panel.querySelector("#cdbx-archive-grace-preset")), "Windows: the shipped row is there: the PR archive delay");
@@ -1453,7 +1535,7 @@ index 878e76a..49455c1 100644
      window.__cmConfig = { ok: true, enabled: true, configured: true, lockedByJsonc: false, source: "default",
        surfaces: ["ccd", "code"], models: 1, webSearch: "", webSearchLocked: false,
        smallFastModel: "", smallFastModelLocked: false, searchConflict: "", subagentModel: "", subagentModelLocked: false,
-@@ -3766,8 +3788,8 @@ async function run() {
+@@ -3766,8 +3789,8 @@ async function run() {
          keySource: "stored", preset: "opencode-go", sessionHeader: "x-opencode-session", effort: ["low", "max"], context: "1m",
          models: [{ id: "glm-5.3", alias: "claude-glm-5.3", listedAs: ["claude-glm-5.3[1m]"], name: "GLM-5.3",
            description: "", vision: false, thinking: true, context: "1m", effort: ["low", "max"], effortDefault: "max", badge: "", agent: false }] }] };
@@ -1464,3 +1546,12 @@ index 878e76a..49455c1 100644
        const winPanel = document.querySelector(".cdbx-panel");
        const winCard = winPanel && winPanel.querySelector(".cdbx-models-card");
        ok(!!winCard && /session header x-opencode-session/.test(winCard.querySelector(".cdbx-state").textContent),
+@@ -4361,6 +4384,8 @@ window.cdbExtra = {
+   transparentChatComposerSet: function (on) { window.__transparentReply=on; return Promise.resolve({ok:true}); },
+   githubAlertsRead: function () { return Promise.resolve(window.__ghAlertsState || { ok: true, enabled: !!window.__ghAlertsOn, lockedByJsonc: null }); },
+   githubAlertsSet: function (on) { window.__ghAlertsCalls = (window.__ghAlertsCalls || []).concat([on]); window.__ghAlertsOn = on; return Promise.resolve({ ok: true, enabled: on }); },
++  usageStatusRead: function () { return Promise.resolve({ ok: true, enabled: !!window.__usageStatusOn, lockedByJsonc: null }); },
++  usageStatusSet: function (on) { window.__usageStatusOn = on; return Promise.resolve({ ok: true, enabled: on }); },
+   githubAlertIconsRead: function () { return Promise.resolve(window.__ghIconsState || { ok: true, enabled: !!window.__ghIconsOn, lockedByJsonc: null }); },
+   githubAlertIconsSet: function (on) { window.__ghIconsCalls = (window.__ghIconsCalls || []).concat([on]); window.__ghIconsOn = on; return Promise.resolve({ ok: true, enabled: on }); },
+   themesList: stub({ ok: true, entries: window.__themes, active: "mario",
