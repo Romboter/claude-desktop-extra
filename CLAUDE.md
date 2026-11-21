@@ -18,7 +18,7 @@ scripts/windows/prepare-sources.sh /tmp/src     # copy + overlay
 git -C /tmp/src diff > scripts/windows/upstream-overlay.patch
 ```
 
-Check before committing: `git diff --diff-filter=M upstream/master...HEAD --stat` must list nothing except files under `.github/workflows/` (the fork edits or deletes upstream's Linux workflows on purpose, and the sync step keeps the fork's version on a conflict there) (fetch `https://github.com/patrickjaja/claude-desktop-extra` as `upstream`). Fork docs go in docs/windows.md or this file, not in README.md / CHANGELOG.md / AGENTS.md.
+Check before committing: `git diff --diff-filter=M upstream/master...HEAD --stat` must list nothing except files under `.github/workflows/` (the fork edits or deletes upstream's Linux workflows on purpose, and the sync step keeps the fork's version on a conflict there) (fetch `https://github.com/patrickjaja/claude-desktop-extra` as `upstream`). Fork docs go in docs/windows.md, docs/windows-troubleshooting.md or this file, not in README.md / CHANGELOG.md / AGENTS.md.
 
 ## Fork-only files
 
