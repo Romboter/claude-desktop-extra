@@ -289,9 +289,18 @@ index f03ea70..0c45304 100644
        # Groups: 0 the cache assigned, 1 the cache the IIFE returns, 2 the memo,
        # 3 the getter, 4 the cache the getter returns. 0, 1 and 4 must agree.
 diff --git a/scripts/tests/core/test-extra-settings-dom.mjs b/scripts/tests/core/test-extra-settings-dom.mjs
-index 98ab8b2..d421861 100644
+index 98ab8b2..c474eb2 100644
 --- a/scripts/tests/core/test-extra-settings-dom.mjs
 +++ b/scripts/tests/core/test-extra-settings-dom.mjs
+@@ -1108,7 +1108,7 @@ async function featuresPanel(featuresItem) {
+     ok(titlesIn(subGroup[0]).join("|") === "Trusted Auto-fix PR authors|Auto-fix notices: ready to merge, comments after merge|Auto-archive delay after a PR merges or closes",
+        "Pull requests rows: " + titlesIn(subGroup[0]).join("|"));
+     // The harness bridge has no tray or developer-tools halves, so those two rows are skipped here.
+-    const appOrder = ["Hide window controls", "Native titlebar", "Transparent window", "Always use the white tray icon", "Theme picker", "Custom shortcuts", "Frosted message input", "Frost only the input field", "GitHub alert callouts", "Alert icons", "Developer tools"];
++    const appOrder = ["Hide window controls", "Native titlebar", "Transparent window", "Always use the white tray icon", "Theme picker", "Custom shortcuts", "Frosted message input", "Frost only the input field", "GitHub alert callouts", "Alert icons", "Usage and session status", "Developer tools"];
+     ok(titlesIn(topGroups[1]).join("|") === appOrder.filter(function (t) { return titlesIn(topGroups[1]).indexOf(t) >= 0; }).join("|") &&
+        titlesIn(topGroups[1]).length >= 4,
+        "App and window rows in order: " + titlesIn(topGroups[1]).join("|"));
 @@ -3835,11 +3835,34 @@ async function run() {
    const box = navbox();
  
