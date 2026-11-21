@@ -17,7 +17,7 @@ if (-not $SkipBuild) {
   # git archive gives LF content (the Windows checkout may be CRLF, which breaks bash shebangs).
   # It exports HEAD: commit your changes first.
   $tar = Join-Path $env:TEMP 'cde-snapshot.tar'
-  git -C $repo archive --format=tar -o $tar HEAD
+  git -C $repo -c core.autocrlf=false archive --format=tar -o $tar HEAD
   if ($LASTEXITCODE) { throw 'git archive failed' }
   tar -xf $tar -C $snap
   git -C $snap init -q
