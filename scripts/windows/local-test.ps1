@@ -21,6 +21,7 @@ if (-not $SkipBuild) {
   if ($LASTEXITCODE) { throw 'git archive failed' }
   tar -xf $tar -C $snap
   git -C $snap init -q
+  git -C $snap remote add origin (git -C $repo remote get-url origin)
   git -C $snap add -A
   git -C $snap -c user.name=snap -c user.email=snap@localhost commit -qm snapshot
   $wslSnap = (wsl wslpath -a $snap.Replace([string][char]92, '/')).Trim()
