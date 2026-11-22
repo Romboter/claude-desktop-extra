@@ -116,6 +116,7 @@ One-time setup:
 .\scripts\windows\local-test.ps1              # build (with the feature harnesses) + smoke test
 .\scripts\windows\local-test.ps1 -SkipTests   # skip the harnesses
 .\scripts\windows\local-test.ps1 -SkipBuild   # reuse dist-local\, only boot it in the Sandbox
+.\scripts\windows\local-test.ps1 -BuildOnly   # build into dist-local\, no Sandbox boot
 ```
 
 It builds from `git archive HEAD` (LF endings, a plain repo with your `origin`), so commit first; uncommitted edits are not built. The build takes about 3 minutes, mostly downloading Anthropic's package; the Sandbox boot about 1 more. The result is `dist-local\`, and the Sandbox's `claude-patches.log` is printed. It prints PASS or FAIL.

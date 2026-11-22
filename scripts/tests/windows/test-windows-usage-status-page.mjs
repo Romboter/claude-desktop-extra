@@ -124,6 +124,45 @@ run("popover", [true], "ok",
    ok(document.querySelector(".up-context-action").textContent === "Compact session", "popover: Compact session button mirrors the rail's");
    ok(document.querySelector(".up-popover-pace").textContent === "10% over pace", "popover: pace beside the header");
    ok(${q(".up-time.up-in-popover")} === 1, "popover: time line above the session meter");`, POPOVER);
+run("sidebar-context", [true], "ok",
+  `ok(${q("#usage-pace .up-ctx-row")} === 1, "sidebar: context row under the limits");
+   ok(document.querySelector("#usage-pace .up-ctx-row .up-label").textContent === "Context 42%", "sidebar: context shows the rail's percent after the label");
+   ok(document.querySelector("#usage-pace .up-ctx-row .up-meta").textContent === "", "sidebar: no token counts without the bridge");
+   ok(document.querySelector("#usage-pace .up-ctx-row .up-fill").style.width === "42%", "sidebar: context bar width follows it");`, POPOVER);
+run("sidebar-context-none", [true], "ok",
+  `ok(${q("#usage-pace .up-ctx-row")} === 0, "sidebar: no rail card, no context row");`);
+// No rail card: the open local session's context comes from Claude's bridge.
+const BRIDGE = `<script>
+  document.querySelector("[data-row-key=a] [data-row-main-button]").setAttribute("aria-current", "page");
+  document.querySelector("[data-row-key=a]").setAttribute("data-row-key", "code:local_x");
+  window.__ctxCalls = 0;
+  window["claude.web"] = { LocalSessions: { getContextUsageSummary: (id) => (window.__ctxCalls++, Promise.resolve(id === "local_x" ? { percentage: 61, totalTokens: 610000, rawMaxTokens: 1000000 } : null)) } };
+</script>`;
+run("sidebar-context-bridge", [true], "ok",
+  `ok(${q("#usage-pace .up-ctx-row")} === 1, "bridge: context row drawn without the rail");
+   ok(document.querySelector("#usage-pace .up-ctx-row .up-label").textContent === "Context 61%", "bridge: percent follows the label");
+   ok(document.querySelector("#usage-pace .up-ctx-row .up-meta").textContent === "610K / 1M", "bridge: used / total tokens on the right (" + document.querySelector("#usage-pace .up-ctx-row .up-meta").textContent + ")");
+   ok(window.__ctxCalls === 1, "bridge: one call at load, none from the repeated renders (" + window.__ctxCalls + ")");`, BRIDGE);
+// The turn ends (running -> idle): one more ask, no timer involved.
+run("sidebar-context-turn-end", [true], "ok",
+  `ok(window.__ctxCalls === 2, "turn end: one ask at load and one when the turn ended (" + window.__ctxCalls + ")");`,
+  BRIDGE.replace("</script>", `
+  window.requestAnimationFrame = function (f) { return setTimeout(f, 0); };
+  var dot = document.createElement("span"); dot.className = "status-dot"; dot.setAttribute("data-kind", "running");
+  document.querySelector("[data-row-key='code:local_x'] [data-row-main-button]").append(dot);
+  setTimeout(function () { dot.setAttribute("data-kind", "idle-x"); dot.remove(); }, 250);
+</script>`));
+// An empty summary falls back to getContextUsage.
+run("sidebar-context-fallback", [true], "ok",
+  `ok(document.querySelector("#usage-pace .up-ctx-row .up-label")?.textContent === "Context 44%", "fallback: getContextUsage fills in when the summary is empty");`,
+  `<script>
+  document.querySelector("[data-row-key=a] [data-row-main-button]").setAttribute("aria-current", "page");
+  document.querySelector("[data-row-key=a]").setAttribute("data-row-key", "code:local_x");
+  window["claude.web"] = { LocalSessions: {
+    getContextUsageSummary: () => Promise.resolve(null),
+    getContextUsage: () => Promise.resolve({ percentage: 44 })
+  } };
+</script>`);
 run("popover-off", [true, false], "ok",
   `ok(${q(".up-context, .up-popover-pace, .up-time")} === 0, "popover: teardown removes context, pace and time lines");`, POPOVER);
 
