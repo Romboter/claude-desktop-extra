@@ -56,6 +56,13 @@ test("applies, is idempotent, and reports already present", () => {
   const second = run(first.text); assert.equal(second.status, 0, second.stderr);
   assert.equal(second.text, first.text); assert.match(second.stdout, /already present/);
 });
+test("another patch injected between VAR=E; and our install: a re-run still sees it and adds nothing", () => {
+  const first = run(fixture);
+  const moved = first.text.replace("hb=e;try{globalThis.__cdbCacheWarm?.stopAll()", "hb=e;try{globalThis.__other=1}catch(_){}try{globalThis.__cdbCacheWarm?.stopAll()");
+  assert.notEqual(moved, first.text);
+  const again = run(moved);
+  assert.equal(again.status, 0, again.stderr); assert.equal(again.text, moved); assert.match(again.stdout, /already present/);
+});
 test("a missing anchor exits 1 and leaves no half patch", () => {
   assert.notEqual(run(fixture.replace(HEADER, "function Ti(e,t){")).status, 0);
   assert.notEqual(run(fixture.replace("_registerClaudeCodeSessionManager", "_other")).status, 0);

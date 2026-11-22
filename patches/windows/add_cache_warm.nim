@@ -67,8 +67,14 @@ proc registerSite(s: string, present: var bool): string =
   if s[m.group(2)] != manager:
     fail("register function no longer stores its argument")
   let whole = s[m.boundaries]
-  if s.find(whole & "try{globalThis.__cdbCacheWarm?.stopAll()") == m.boundaries.a:
-    if s.count(whole & installFor(manager)) != 1:
+  # Already installed: the exact install text exactly once, in this function's body. Another
+  # patch may have put its own code between `VAR=E;` and ours, so look past the start.
+  # ponytail: "in this function" is a 20000-char window after its head; tighten if a patch ever
+  # injects more than that here.
+  if "__cdbCacheWarm?.stopAll()" in s:
+    let install = installFor(manager)
+    let at = s.find(install)
+    if s.count(install) != 1 or at < m.boundaries.b or at - m.boundaries.a > 20000:
       fail("install differs from this build")
     present = true
     return s
