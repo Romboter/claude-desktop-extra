@@ -16,7 +16,10 @@
     if (st && st.handle !== undefined) deps.clearTimer(st.handle);
     sessions.delete(id);
   };
-  const fail = (id, st, reason) => { st.pending = undefined; say(id, `skip(${reason})`, st); };
+  const fail = (id, st, reason) => {
+    st.pending = undefined; say(id, `skip(${reason})`, st);
+    if (reason === "gone") sessions.delete(id); // archived or deleted: nothing left to warm
+  };
 
   function fire(id) {
     try { check(id); } catch (error) { try { deps.log("[cache-warm] " + id + " error " + String(error)); } catch (ignored) {} }
@@ -72,6 +75,7 @@
       st.handle = deps.setTimer(() => fire(id), st.expiresAt - MARGIN[st.ttl] - now);
     },
     sessionGone: drop,
+    size: () => sessions.size,
     stopAll() { for (const id of [...sessions.keys()]) drop(id); },
   };
   return api;

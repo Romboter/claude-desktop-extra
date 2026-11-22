@@ -166,6 +166,14 @@ test("a poke that missed the cache stops the chain; its real cost is charged, a 
   g.warm.turnEnded("s", usage());
   await g.advance(HOUR - 5 * MIN); assert.equal(g.logs.filter(l => l.includes("skip(busy)")).length, 2, "refused sends use up no budget");
 });
+test("a poke refused as gone drops the session's record; busy keeps it", async () => {
+  for (const [reason, left] of [["gone", 0], ["busy", 1]]) {
+    const h = harness({}, async () => ({ delivered: false, reason })); h.warm.turnEnded("s", usage());
+    assert.equal(h.warm.size(), 1);
+    await h.advance(HOUR - 5 * MIN);
+    assert.equal(h.warm.size(), left, reason);
+  }
+});
 test("skip(late): a timer that fires less than 30 s before expiry does not poke", async () => {
   const h = harness(); h.warm.turnEnded("s", usage());
   [...h.timers.values()][0].at = h.now() + HOUR - 10_000;
