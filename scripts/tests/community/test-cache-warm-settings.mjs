@@ -98,6 +98,7 @@ test("bridge methods and the Community page row", () => {
   const page = readFileSync(join(ROOT, "js/extra_settings_page.js"), "utf8");
   const row = /function renderCacheWarmRow\(panel\) \{[\s\S]*?\n {2}\}\n/.exec(page);
   assert.ok(row); assert.match(row[0], /Cache warmer/); assert.match(row[0], /cacheWarmRead/); assert.match(row[0], /cacheWarmSet/);
+  assert.ok(row[0].includes('rewrites.input.value.trim() === ""'), "an empty rewrites field must not mean no cost cap");
   assert.equal(row[0].includes(String.fromCharCode(0x2014)), false);
   assert.match(page, /var FEATURE_GROUPS = [\s\S]*?renderCacheWarmRow/);
   assert.match(page, /var WINDOWS_ROWS = \[[^\]]*renderCacheWarmRow/);

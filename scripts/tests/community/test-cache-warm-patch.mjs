@@ -82,6 +82,25 @@ test("switch on: a healthy turn arms a timer; firing it sends the poke with the 
   assert.equal(id, "s"); assert.match(text, /cache keep-alive/); assert.equal(images, undefined);
   assert.equal(JSON.stringify(options), JSON.stringify({ origin: { kind: "auto-continuation" }, initiator: "cache-warm", messageUuid: "uuid-1" })); // JSON: the sandbox objects come from another realm
 });
+test("a healthy result with no pending cycle arms nothing (upstream returns early there)", () => {
+  const w = load(run(fixture).text);
+  w.sandbox.__cdbCacheWarmConfig = () => ({ enabled: true, hours: 3, rewrites: 1 });
+  w.sandbox.c5t(w.manager);
+  assert.equal(w.sandbox.Ti({ sessionId: "s" }, healthy), "orig:none"); assert.equal(w.timers.length, 0);
+});
+test("a poke's own turn (the cycle carries the poke's messageUuid) does not reset the caps", async () => {
+  let clock = 1_000_000;
+  const w = load(run(fixture).text, { Date: { now: () => clock } });
+  w.sandbox.__cdbCacheWarmConfig = () => ({ enabled: true, hours: 3, rewrites: 0 });
+  w.sandbox.c5t(w.manager);
+  w.sandbox.Ti({ sessionId: "s", pendingCycle: { userMessageUuid: "real" } }, healthy);
+  for (let i = 0; i < 6 && w.timers.length; i++) {
+    const t = w.timers.shift(); clock += t.ms; t.fn(); await new Promise(r => setImmediate(r));
+    if (w.sent.length > i) w.sandbox.Ti({ sessionId: "s", pendingCycle: { userMessageUuid: "uuid-1" } }, healthy);
+  }
+  assert.equal(w.sent.length, 3, "55, 110 and 165 minutes pass; 220 minutes is past the 3 h cap");
+  assert.equal(w.timers.length, 0);
+});
 test("an unhealthy or non-final turn arms nothing", () => {
   const w = load(run(fixture).text);
   w.sandbox.__cdbCacheWarmConfig = () => ({ enabled: true, hours: 3, rewrites: 1 });
@@ -91,14 +110,14 @@ test("an unhealthy or non-final turn arms nothing", () => {
   assert.equal(w.timers.length, 0);
 });
 test("a busy or archived session is not poked", async () => {
-  for (const view of [{ isRunning: true }, { turnRunning: true }, { isArchived: true }, undefined]) {
+  for (const [view, reason] of [[{ isRunning: true }, "busy"], [{ turnRunning: true }, "busy"], [{ isArchived: true }, "gone"], [undefined, "gone"]]) {
     const w = load(run(fixture).text);
     w.sandbox.__cdbCacheWarmConfig = () => ({ enabled: true, hours: 3, rewrites: 1 });
     w.sandbox.c5t(w.manager); w.manager.view = view;
     w.sandbox.Ti({ sessionId: "s", pendingCycle: {} }, healthy);
     w.timers[0].fn(); await new Promise(r => setImmediate(r));
     assert.equal(w.sent.length, 0);
-    assert.ok(w.diag.some(l => /skip\((busy|gone)\)/.test(l)), JSON.stringify(w.diag));
+    assert.ok(w.diag.some(l => l.includes(`skip(${reason})`)), JSON.stringify(w.diag));
   }
 });
 test("a throwing config cannot break the turn end", () => {

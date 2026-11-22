@@ -141,7 +141,7 @@ index 8a47701..0c8cc9e 100644
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix ready-to-merge wake is Linux only" }; };
        } else if (ch.indexOf("cdb-session-start:") === 0) {
 diff --git a/js/extra_settings_page.js b/js/extra_settings_page.js
-index 93b6a45..a6a7eda 100644
+index 93b6a45..07cb05a 100644
 --- a/js/extra_settings_page.js
 +++ b/js/extra_settings_page.js
 @@ -588,12 +588,12 @@
@@ -220,7 +220,7 @@ index 93b6a45..a6a7eda 100644
 +      if (!Number.isInteger(value.hours) || value.hours < 1 || value.hours > 24) {
 +        state.textContent = "Hours: a whole number from 1 to 24."; hours.input.focus(); return;
 +      }
-+      if (!isFinite(value.rewrites) || value.rewrites < 0 || value.rewrites > 10) {
++      if (rewrites.input.value.trim() === "" || !isFinite(value.rewrites) || value.rewrites < 0 || value.rewrites > 10) {
 +        state.textContent = "Rewrites: a number from 0 to 10."; rewrites.input.focus(); return;
 +      }
 +      busy = true; controls(); state.textContent = "Saving...";

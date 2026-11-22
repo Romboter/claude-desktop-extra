@@ -3,7 +3,7 @@
 #
 # Opt-in (default OFF): cache warmer. Sends one tiny turn to an idle Code session shortly before
 # its prompt cache would lapse, under two user-set caps. Switch and caps: Settings -> Extra ->
-# Community Features (keys cacheWarm, cacheWarmHours, cacheWarmRewrites), read live through
+# Community Features (key cacheWarm = {enabled, hours, rewrites}), read live through
 # globalThis.__cdbCacheWarmConfig() from js/extra_settings_main.js; absent or off = inert.
 #
 # Two sub-patches, each anchor must match exactly once:
@@ -11,7 +11,7 @@
 #      `_registerClaudeCodeSessionManager:()=>NAME`): after `VAR=E;` builds the policy helper
 #      js/cache_warm.js around the manager and stores it in globalThis.__cdbCacheWarm.
 #   B  the cycle-close helper (`function NAME(S,{health:H,...usage:U,...turnCompleted:T=!1,...}){`):
-#      at the start of the body, a healthy completed turn reports (session id, usage, the cycle's
+#      at the start of the body, a healthy completed turn with a pending cycle reports (session id, usage, the cycle's
 #      userMessageUuid) to the helper, inside try/catch so nothing it throws reaches upstream.
 # Idempotency asserts the exact injected end states, rebuilt from the identifiers they were
 # written with.
@@ -39,7 +39,7 @@ proc installFor(manager: string): string =
     diag("__cdbCwE1") & "}"
 
 proc hookFor(session, health, usage, completed: string): string =
-  "if(" & completed & "&&" & health & "===\"healthy\")try{globalThis.__cdbCacheWarm?.turnEnded(" &
+  "if(" & completed & "&&" & health & "===\"healthy\"&&" & session & ".pendingCycle)try{globalThis.__cdbCacheWarm?.turnEnded(" &
     session & ".sessionId," & usage & "," & session & ".pendingCycle?.userMessageUuid)}catch(__cdbCwE2){" &
     diag("__cdbCwE2") & "}"
 

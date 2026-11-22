@@ -15,7 +15,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 function harness(config = {}, send) {
   let clock = 1_000_000, nextHandle = 1, uuidCount = 0;
   const timers = new Map(), logs = [], sent = [];
-  const cfg = { enabled: true, hours: 3, rewrites: 1, ttlEnv: undefined, ttlSetting: undefined, ...config };
+  const cfg = { enabled: true, hours: 3, rewrites: 1, ttlEnv: undefined, ...config };
   const warm = factory({
     now: () => clock,
     setTimer: (fn, ms) => { const h = nextHandle++; timers.set(h, { fn, at: clock + ms }); return h; },
@@ -57,15 +57,15 @@ test("a read-only turn keeps the previous tier", () => {
   const h = harness(); h.warm.turnEnded("s", usage()); h.warm.turnEnded("s", readOnly());
   assert.equal(dueIn(h), HOUR - 5 * MIN);
 });
-test("no tier seen and no env or setting: no timer", () => {
+test("no tier seen and no env var: no timer", () => {
   const h = harness(); h.warm.turnEnded("s", readOnly());
   assert.equal(h.timers.size, 0);
 });
-test("ttl precedence: env beats setting beats usage tier", () => {
-  let h = harness({ ttlEnv: "5m", ttlSetting: "1h" }); h.warm.turnEnded("s", usage());
-  assert.equal(dueIn(h), 4 * MIN);
-  h = harness({ ttlSetting: "5m" }); h.warm.turnEnded("s", usage());
-  assert.equal(dueIn(h), 4 * MIN);
+test("ttl precedence: the observed tier beats the env var; env is used before any tier was seen", () => {
+  let h = harness({ ttlEnv: "1h" }); h.warm.turnEnded("s", only5m());
+  assert.equal(dueIn(h), 4 * MIN, "the server downgraded to 5m: trust what the usage says");
+  h = harness({ ttlEnv: "5m" }); h.warm.turnEnded("s", readOnly());
+  assert.equal(dueIn(h), 4 * MIN, "no tier seen yet: the env var");
 });
 test("poke fires once, then the poke turn arms the next one", async () => {
   const h = harness(); h.warm.turnEnded("s", usage());
@@ -90,7 +90,7 @@ test("skip(cold) when the timer fires after the cache expired (resume from sleep
   assert.equal(h.sent.length, 0); assert.match(h.logs.at(-1), /skip\(cold\)/);
 });
 test("skip(cold) when the last turn neither read nor wrote cache", async () => {
-  const h = harness({ ttlSetting: "1h" });
+  const h = harness({ ttlEnv: "1h" });
   h.warm.turnEnded("s", usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: {} }));
   await h.advance(HOUR);
   assert.equal(h.sent.length, 0); assert.match(h.logs.at(-1), /skip\(cold\)/);
@@ -148,12 +148,43 @@ test("switch flipped off while armed: nothing sent, timers cleared", async () =>
   h.cfg.enabled = false; await h.advance(HOUR);
   assert.equal(h.sent.length, 0); assert.equal(h.timers.size, 0);
 });
-test("delivered:false and a rejected send both log a skip and arm nothing", async () => {
-  for (const send of [async () => ({ delivered: false }), async () => { throw new Error("boom"); }]) {
+test("delivered:false logs skip(not-delivered); a rejected send logs skip(error); neither arms a timer", async () => {
+  for (const [send, reason] of [[async () => ({ delivered: false }), "not-delivered"], [async () => { throw new Error("boom"); }, "error"]]) {
     const h = harness({}, send); h.warm.turnEnded("s", usage());
     await h.advance(HOUR - 5 * MIN);
-    assert.match(h.logs.at(-1), /skip\((not-delivered|error)\)/); assert.equal(h.timers.size, 0);
+    assert.ok(h.logs.at(-1).includes(`skip(${reason})`), h.logs.at(-1)); assert.equal(h.timers.size, 0);
   }
+});
+test("a poke that missed the cache stops the chain; its real cost is charged, a failed send is not", async () => {
+  const h = harness({ hours: 24, rewrites: 1 }); h.warm.turnEnded("s", usage({ input_tokens: 0, cache_read_input_tokens: 99_500, cache_creation_input_tokens: 500 }));
+  await h.advance(HOUR - 5 * MIN);
+  h.warm.turnEnded("s", usage({ input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 100_000,
+    cache_creation: { ephemeral_1h_input_tokens: 100_000, ephemeral_5m_input_tokens: 0 } }), h.sent[0].uuid);
+  assert.equal(h.timers.size, 0); assert.ok(h.logs.at(-1).includes("skip(cold)"), h.logs.at(-1));
+  const g = harness({}, async () => ({ delivered: false, reason: "busy" })); g.warm.turnEnded("s", usage());
+  await g.advance(HOUR - 5 * MIN);
+  g.warm.turnEnded("s", usage());
+  await g.advance(HOUR - 5 * MIN); assert.equal(g.logs.filter(l => l.includes("skip(busy)")).length, 2, "refused sends use up no budget");
+});
+test("skip(late): a timer that fires less than 30 s before expiry does not poke", async () => {
+  const h = harness(); h.warm.turnEnded("s", usage());
+  [...h.timers.values()][0].at = h.now() + HOUR - 10_000;
+  await h.advance(HOUR - 5_000);
+  assert.equal(h.sent.length, 0); assert.ok(h.logs.at(-1).includes("skip(late)"), h.logs.at(-1));
+});
+test("a throw inside the timer callback is contained and logged", async () => {
+  let throwing = false;
+  const h = harness(); h.warm.turnEnded("s", usage());
+  const real = h.cfg; Object.defineProperty(h.cfg, "enabled", { get() { if (throwing) throw new Error("cfg boom"); return true; } });
+  throwing = true;
+  await h.advance(HOUR - 5 * MIN);
+  assert.ok(h.logs.some(l => l.includes("cfg boom")), JSON.stringify(h.logs)); assert.equal(h.sent.length, 0);
+});
+test("a result with no usage at all (a local command) leaves the armed timer and the caps alone", () => {
+  const h = harness(); h.warm.turnEnded("s", usage());
+  const handle = [...h.timers.keys()][0];
+  h.warm.turnEnded("s", { input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 });
+  assert.deepEqual([...h.timers.keys()], [handle]);
 });
 test("two turnEnded calls leave exactly one live timer per session", () => {
   const h = harness(); h.warm.turnEnded("s", usage()); h.warm.turnEnded("s", usage());
