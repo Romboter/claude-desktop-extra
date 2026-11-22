@@ -51,6 +51,8 @@ const healthy = { health: "healthy", turnCompleted: true, usage };
 test("applies, is idempotent, and reports already present", () => {
   const first = run(fixture); assert.equal(first.status, 0, first.stderr);
   assert.match(first.text, /function c5t\(e\)\{hb=e;try\{/); assert.match(first.text, /__cdbCacheWarm/);
+  const catches = [...first.text.matchAll(/catch\((__cdbCw\w+)\)/g)].map(m => m[1]);
+  assert.equal(catches.length, 2); assert.equal(new Set(catches).size, 2, "the build's check rejects one injected name used in two chunk parts");
   const second = run(first.text); assert.equal(second.status, 0, second.stderr);
   assert.equal(second.text, first.text); assert.match(second.stdout, /already present/);
 });

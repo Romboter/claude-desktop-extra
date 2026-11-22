@@ -21,7 +21,8 @@ import regex
 const helper = staticRead("../../js/cache_warm.js")
 
 const pokeText = "(cache keep-alive: reply with the single word ok)"
-const diag = "globalThis.__cdbDiag?.(\"[cache-warm] \"+String(__cdbCwE))"
+proc diag(name: string): string =
+  "globalThis.__cdbDiag?.(\"[cache-warm] \"+String(" & name & "))"
 
 proc installFor(manager: string): string =
   "try{globalThis.__cdbCacheWarm?.stopAll();globalThis.__cdbCacheWarm=(" & helper &
@@ -34,13 +35,13 @@ proc installFor(manager: string): string =
     ".sendMessage(i,\"" & pokeText &
     "\",void 0,{origin:{kind:\"auto-continuation\"},initiator:\"cache-warm\",messageUuid:u})}});" &
     "{let n=0;const w=()=>globalThis.__cdbDiag?globalThis.__cdbDiag(\"[cache-warm] installed\"):n++<60&&setTimeout(w,500);w()}" &
-    "}catch(__cdbCwE){" &
-    diag & "}"
+    "}catch(__cdbCwE1){" &
+    diag("__cdbCwE1") & "}"
 
 proc hookFor(session, health, usage, completed: string): string =
   "if(" & completed & "&&" & health & "===\"healthy\")try{globalThis.__cdbCacheWarm?.turnEnded(" &
-    session & ".sessionId," & usage & "," & session & ".pendingCycle?.userMessageUuid)}catch(__cdbCwE){" &
-    diag & "}"
+    session & ".sessionId," & usage & "," & session & ".pendingCycle?.userMessageUuid)}catch(__cdbCwE2){" &
+    diag("__cdbCwE2") & "}"
 
 proc escaped(name: string): string =
   name.replace("$", "\\$")
