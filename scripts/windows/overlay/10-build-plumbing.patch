@@ -40,7 +40,7 @@ index f79c42f..44df9ab 100644
  clean:
  	@rm -rf $(BINS) .nimcache
 diff --git a/scripts/apply_patches.py b/scripts/apply_patches.py
-index 7e5801b..2ebd23e 100644
+index 7e5801b..6d3ca10 100644
 --- a/scripts/apply_patches.py
 +++ b/scripts/apply_patches.py
 @@ -11,7 +11,11 @@ target location.
@@ -65,7 +65,7 @@ index 7e5801b..2ebd23e 100644
 +# prefix injections then land ahead of the others). Pinned like
 +# EXPECTED_PATCH_COUNT.
 +WINDOWS_SUBDIR = "windows"
-+EXPECTED_WINDOWS_PATCH_COUNT = 3
++EXPECTED_WINDOWS_PATCH_COUNT = 4
 +# Shared patches the Windows build carries: every core and community feature
 +# except Linux window handling (window controls, native titlebar, window
 +# transparency), the Quick Entry socket and the Linux profile launcher's URL
