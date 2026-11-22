@@ -5,7 +5,7 @@ A portable Windows build of Anthropic's official Claude Desktop with this projec
 - **Profiles**: several separate Claude instances side by side, each with its own sign-in, settings and Claude Code configuration.
 - **Settings → Extra**, with these panels:
   - **Themes**: the [theme engine](themes.md), its bundled palettes and the <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> picker.
-  - **Community**: the opt-in features. They are diff view modes, panel tabs and files quick open (<kbd>Ctrl</kbd>+<kbd>P</kbd>) in the [Code tab](code-tab.md); load large sessions in full; allow non-Anthropic models (3P gateways); the theme picker; developer tools; the [Jira issue tracker](jira-tracker.md) (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd>); [usage and session status](usage-session-status.md); and the [auto-archive delay](auto-archive-grace.md) after a PR merges or closes.
+  - **Community**: the opt-in features. They are diff view modes, panel tabs and files quick open (<kbd>Ctrl</kbd>+<kbd>P</kbd>) in the [Code tab](code-tab.md); load large sessions in full; allow non-Anthropic models (3P gateways); the theme picker; developer tools; the [Jira issue tracker](jira-tracker.md) (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>J</kbd>); [usage and session status](usage-session-status.md); the [auto-archive delay](auto-archive-grace.md) after a PR merges or closes; and the cache warmer, which sends one short turn to an idle Code session before its prompt cache lapses (see [fork-only patches](windows-patches.md)).
   - **Models**: [custom models](custom-models.md) from other providers in the Code tab's picker.
   - **Anthropic**: [feature flag overrides](feature-flags.md).
 
