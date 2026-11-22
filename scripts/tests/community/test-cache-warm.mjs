@@ -16,13 +16,11 @@ function harness(config = {}, send) {
   let clock = 1_000_000, nextHandle = 1, uuidCount = 0;
   const timers = new Map(), logs = [], sent = [];
   const cfg = { enabled: true, hours: 3, rewrites: 1, ttlEnv: undefined, ttlSetting: undefined, ...config };
-  let busy = false;
   const warm = factory({
     now: () => clock,
     setTimer: (fn, ms) => { const h = nextHandle++; timers.set(h, { fn, at: clock + ms }); return h; },
     clearTimer: h => { timers.delete(h); },
     config: () => cfg,
-    isBusy: () => busy,
     sendPoke: send || (async (id, uuid) => { sent.push({ id, uuid }); return { delivered: true }; }),
     newUuid: () => "poke-" + ++uuidCount,
     log: line => logs.push(line),
@@ -36,7 +34,7 @@ function harness(config = {}, send) {
     }
     clock = end;
   }
-  return { warm, cfg, timers, logs, sent, advance, setBusy: v => { busy = v; }, now: () => clock };
+  return { warm, cfg, timers, logs, sent, advance, now: () => clock };
 }
 const usage = (o = {}) => ({ input_tokens: 2, cache_read_input_tokens: 100_000, cache_creation_input_tokens: 500,
   cache_creation: { ephemeral_1h_input_tokens: 500, ephemeral_5m_input_tokens: 0 }, ...o });
@@ -78,10 +76,12 @@ test("poke fires once, then the poke turn arms the next one", async () => {
   h.warm.turnEnded("s", readOnly(), h.sent[0].uuid);
   assert.equal(h.timers.size, 1);
 });
-test("skip(busy) when a turn is running", async () => {
-  const h = harness(); h.warm.turnEnded("s", usage()); h.setBusy(true);
-  await h.advance(HOUR - 5 * MIN);
-  assert.equal(h.sent.length, 0); assert.match(h.logs.at(-1), /skip\(busy\)/);
+test("a refused poke logs its reason (busy, gone) and arms nothing", async () => {
+  for (const reason of ["busy", "gone"]) {
+    const h = harness({}, async () => ({ delivered: false, reason })); h.warm.turnEnded("s", usage());
+    await h.advance(HOUR - 5 * MIN);
+    assert.ok(h.logs.at(-1).includes(`skip(${reason})`), h.logs.at(-1)); assert.equal(h.timers.size, 0);
+  }
 });
 test("skip(cold) when the timer fires after the cache expired (resume from sleep)", async () => {
   const h = harness(); h.warm.turnEnded("s", usage());

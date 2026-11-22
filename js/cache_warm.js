@@ -25,7 +25,6 @@
     const cfg = deps.config(), now = deps.now();
     if (!cfg.enabled) { api.stopAll(); return; }
     const pokeCost = st.context * POKE, limit = cfg.rewrites * st.context * REWRITE[st.ttl];
-    if (deps.isBusy(id)) return say(id, "skip(busy)", st);
     if (now > st.expiresAt) return say(id, "skip(cold)", st);
     if (now - st.lastRealAt > cfg.hours * HOUR) return say(id, "skip(time-cap)", st);
     if (cfg.rewrites > 0 && st.spent + pokeCost > limit) return say(id, "skip(cost-cap)", st);
@@ -34,7 +33,7 @@
     st.spent += pokeCost;
     say(id, "poke", st);
     Promise.resolve().then(() => deps.sendPoke(id, uuid)).then(
-      result => { if (!result || !result.delivered) fail(id, st, "not-delivered"); },
+      result => { if (!result || !result.delivered) fail(id, st, (result && result.reason) || "not-delivered"); },
       () => fail(id, st, "error"));
   }
 
