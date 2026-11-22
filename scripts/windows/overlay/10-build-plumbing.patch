@@ -47,7 +47,7 @@ index f79c42f..5e9d301 100644
  clean:
  	@rm -rf $(BINS) .nimcache
 diff --git a/scripts/apply_patches.py b/scripts/apply_patches.py
-index 7e5801b..3adb067 100644
+index 7e5801b..7da12bc 100644
 --- a/scripts/apply_patches.py
 +++ b/scripts/apply_patches.py
 @@ -11,7 +11,11 @@ target location.
@@ -63,7 +63,7 @@ index 7e5801b..3adb067 100644
  
  <app_dir> is the directory that contains app.asar.contents/, i.e. the same
  path that build-patched-tarball.sh uses as "$WORK_DIR/app".
-@@ -33,7 +37,41 @@ PATCH_SUBDIRS = ("linux", "core", "community")
+@@ -33,7 +37,42 @@ PATCH_SUBDIRS = ("linux", "core", "community")
  # forgotten `git mv` changes what gets discovered, the build must fail rather
  # than quietly ship a release with a patch missing. Bump this when you add or
  # remove a patch.
@@ -84,6 +84,7 @@ index 7e5801b..3adb067 100644
 +    "add_feature_allow_non_anthropic_models",
 +    "add_feature_auto_archive_grace",
 +    "add_feature_auto_archive_grace_web",
++    "add_feature_cache_warm",
 +    "add_feature_custom_models",
 +    "add_feature_custom_themes",
 +    "add_feature_dev_tools_toggle",
@@ -106,7 +107,7 @@ index 7e5801b..3adb067 100644
  
  # Byte strings that only ever appear in a bundle one of our builds already
  # patched: every injected identifier starts with `__cdb`, and
-@@ -214,12 +252,58 @@ def run_nim_patch(nim_bin: Path, target_file: Path) -> bool:
+@@ -214,12 +253,58 @@ def run_nim_patch(nim_bin: Path, target_file: Path) -> bool:
          return False
  
  
@@ -169,7 +170,7 @@ index 7e5801b..3adb067 100644
  
      if not patches_dir.is_dir():
          print(f"[ERROR] patches_dir not found: {patches_dir}", file=sys.stderr)
-@@ -268,6 +352,9 @@ def main():
+@@ -268,6 +353,9 @@ def main():
          )
          sys.exit(1)
  
