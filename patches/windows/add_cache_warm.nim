@@ -107,6 +107,6 @@ proc apply*(input: string): string =
 
 when isMainModule:
   if paramCount() != 1:
-    quit("Usage: add_feature_cache_warm <bundle.js>", 1)
+    quit("Usage: add_cache_warm <bundle.js>", 1)
   let file = paramStr(1)
   writeFile(file, apply(readFile(file)))

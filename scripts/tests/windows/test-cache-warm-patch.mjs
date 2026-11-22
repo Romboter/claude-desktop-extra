@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// test-cache-warm-patch.mjs - the compiled patch patches/community/add_feature_cache_warm: two anchors
+// test-cache-warm-patch.mjs - the compiled patch patches/windows/add_cache_warm: two anchors
 // (the session-manager register function, the cycle-close helper), idempotency, and that the glue
 // arms a poke on a healthy turn end and stays inert while the switch is off.
 import assert from "node:assert/strict";
@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import vm from "node:vm";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
-const binary = join(ROOT, "patches/community/add_feature_cache_warm");
+const binary = join(ROOT, "patches/windows/add_cache_warm");
 accessSync(binary + (process.platform === "win32" ? ".exe" : ""), constants.X_OK);
 
 const HEADER = "function Ti(e,{health:n,unhealthyReason:r,errorMessage:i,errorCategory:a,apiErrorKind:o,httpStatus:s,noResponseCategory:c,rewindTargetMissReason:u,resultSubtype:d,cliStderrTail:f,appQuitTrigger:p,atQuit:m,usage:h,cliTimings:g,remoteTurnContinues:_=!1,turnCompleted:v=!1,automated:y=!1,noTurnRan:b=!1}){";
