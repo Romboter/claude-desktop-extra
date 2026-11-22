@@ -1,9 +1,9 @@
 # Local build + test: build in WSL, boot the result in Windows Sandbox.
-#   .\scripts\windows\local-test.ps1 [-SkipTests] [-SkipBuild]
+#   .\scripts\windows\local-test.ps1 [-SkipTests] [-SkipBuild] [-BuildOnly]
 # Needs WSL (Ubuntu) and the Windows Sandbox feature (Windows 11 Pro; enable
 # once from an elevated prompt: Enable-WindowsOptionalFeature -Online
 # -FeatureName Containers-DisposableClientVM, then reboot). x64 only.
-param([switch]$SkipTests, [switch]$SkipBuild)
+param([switch]$SkipTests, [switch]$SkipBuild, [switch]$BuildOnly)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
 $dist = Join-Path $repo 'dist-local'
@@ -19,7 +19,9 @@ if (-not $SkipBuild) {
   $tar = Join-Path $env:TEMP 'cde-snapshot.tar'
   git -C $repo -c core.autocrlf=false archive --format=tar -o $tar HEAD
   if ($LASTEXITCODE) { throw 'git archive failed' }
-  tar -xf $tar -C $snap
+  # Windows' own tar: from Git Bash a bare `tar` is GNU tar, which reads C: as a remote host.
+  & "$env:SystemRoot\System32\tar.exe" -xf $tar -C $snap
+  if ($LASTEXITCODE) { throw 'tar failed' }
   git -C $snap init -q
   git -C $snap remote add origin (git -C $repo remote get-url origin)
   git -C $snap add -A
@@ -32,6 +34,7 @@ if (-not $SkipBuild) {
   Copy-Item "$snap\dist-local" $dist -Recurse
 }
 if (-not (Get-ChildItem "$dist\*.zip" -ErrorAction SilentlyContinue)) { throw "no zip in $dist" }
+if ($BuildOnly) { Get-ChildItem $dist | Select-Object Name, Length; Write-Host "Built: $dist"; exit 0 }
 if (-not (Get-Command WindowsSandbox.exe -ErrorAction SilentlyContinue)) { throw 'Windows Sandbox is not enabled (see the header of this script)' }
 
 $in = Join-Path $env:TEMP 'cde-sandbox-in'; $out = Join-Path $env:TEMP 'cde-sandbox-out'
