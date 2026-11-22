@@ -1,5 +1,5 @@
 diff --git a/patches/Makefile b/patches/Makefile
-index f79c42f..1dae28c 100644
+index f79c42f..5e9d301 100644
 --- a/patches/Makefile
 +++ b/patches/Makefile
 @@ -1,9 +1,10 @@
@@ -23,7 +23,15 @@ index f79c42f..1dae28c 100644
  BINS := $(SRCS:.nim=)
  
  ifeq ($(strip $(SRCS)),)
-@@ -209,5 +210,14 @@ community/add_feature_jira_tracker: \
+@@ -63,6 +64,7 @@ linux/fix_cowork_device_icon_web: \
+   ../js/cowork_device_icon_web_page.js
+ 
+ community/add_feature_autofix_merge_ready: ../js/autofix_merge_ready.js
++community/add_feature_cache_warm: ../js/cache_warm.js
+ community/add_feature_cu_escape_abort: ../js/cu_esc_watch.js
+ 
+ community/add_feature_autofix_post_merge: ../js/autofix_post_merge.js
+@@ -209,5 +211,14 @@ community/add_feature_jira_tracker: \
    ../js/jira_tracker_web_page.js
  
  
@@ -39,7 +47,7 @@ index f79c42f..1dae28c 100644
  clean:
  	@rm -rf $(BINS) .nimcache
 diff --git a/scripts/apply_patches.py b/scripts/apply_patches.py
-index 7e5801b..2ebd23e 100644
+index 7e5801b..3adb067 100644
 --- a/scripts/apply_patches.py
 +++ b/scripts/apply_patches.py
 @@ -11,7 +11,11 @@ target location.
@@ -55,10 +63,13 @@ index 7e5801b..2ebd23e 100644
  
  <app_dir> is the directory that contains app.asar.contents/, i.e. the same
  path that build-patched-tarball.sh uses as "$WORK_DIR/app".
-@@ -35,6 +39,40 @@ PATCH_SUBDIRS = ("linux", "core", "community")
+@@ -33,7 +37,41 @@ PATCH_SUBDIRS = ("linux", "core", "community")
+ # forgotten `git mv` changes what gets discovered, the build must fail rather
+ # than quietly ship a release with a patch missing. Bump this when you add or
  # remove a patch.
- EXPECTED_PATCH_COUNT = 76
- 
+-EXPECTED_PATCH_COUNT = 76
++EXPECTED_PATCH_COUNT = 77
++
 +# The Windows build (--windows). patches/windows/ holds the Windows-only
 +# patches; they are applied AFTER the shared ones (on a shared target, their
 +# prefix injections then land ahead of the others). Pinned like
@@ -92,10 +103,9 @@ index 7e5801b..2ebd23e 100644
 +    "add_growthbook_overrides",
 +    "fix_profile_window_title",
 +)
-+
+ 
  # Byte strings that only ever appear in a bundle one of our builds already
  # patched: every injected identifier starts with `__cdb`, and
- # `__nav_spoof_applied` is the marker of the navigator spoof removed for issue
 @@ -214,12 +252,58 @@ def run_nim_patch(nim_bin: Path, target_file: Path) -> bool:
          return False
  
@@ -170,7 +180,7 @@ index 7e5801b..2ebd23e 100644
      nim_jobs_by_target = {}  # real_target -> list[(patch_file, nim_binary)]
  
 diff --git a/scripts/run-feature-tests.sh b/scripts/run-feature-tests.sh
-index 5caea23..e64a3a9 100644
+index 5caea23..42bc706 100644
 --- a/scripts/run-feature-tests.sh
 +++ b/scripts/run-feature-tests.sh
 @@ -1,5 +1,5 @@
@@ -188,7 +198,13 @@ index 5caea23..e64a3a9 100644
  
  set -uo pipefail
  
-@@ -34,17 +35,25 @@ EXPECTED_TEST_HARNESSES=103
+@@ -29,22 +30,30 @@ TESTS_DIR="$SCRIPT_DIR/tests"
+ # `git mv` changes what gets discovered, this fails rather than quietly reporting
+ # a green run over a shrunken suite - the same reasoning as EXPECTED_PATCH_COUNT
+ # in scripts/apply_patches.py. Bump this when you add or remove a harness.
+-EXPECTED_TEST_HARNESSES=103
++EXPECTED_TEST_HARNESSES=106
+ 
  CATEGORIES=(community core linux)
  
  usage() {

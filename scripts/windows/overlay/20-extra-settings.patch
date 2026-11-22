@@ -1,5 +1,5 @@
 diff --git a/js/extra_settings_bridge.js b/js/extra_settings_bridge.js
-index 3081a1b..bca4455 100644
+index 3081a1b..1690eb3 100644
 --- a/js/extra_settings_bridge.js
 +++ b/js/extra_settings_bridge.js
 @@ -63,6 +63,12 @@
@@ -15,11 +15,20 @@ index 3081a1b..bca4455 100644
      githubAlertIconsRead: function () {
        return ipcRenderer.invoke("cdb-alert-icons:read");
      },
+@@ -173,6 +179,8 @@
+ 
+     autoArchiveGraceRead: function (sessionId) { return sessionId === undefined ? ipcRenderer.invoke("cdb-archive-grace:read") : ipcRenderer.invoke("cdb-archive-grace:read", sessionId); },
+     autoArchiveGraceSet: function (minutes) { return ipcRenderer.invoke("cdb-archive-grace:set", minutes); },
++    cacheWarmRead: function () { return ipcRenderer.invoke("cdb-cache-warm:read"); },
++    cacheWarmSet: function (value) { return ipcRenderer.invoke("cdb-cache-warm:set", value); },
+     // The 1P Code page's "Keep this session" (js/auto_archive_grace_web_page.js):
+     // the session id only; main validates it and writes upstream's own
+     // per-session "Auto-archive on merge or close" = false.
 diff --git a/js/extra_settings_main.js b/js/extra_settings_main.js
-index 8a47701..75961ce 100644
+index 8a47701..0c8cc9e 100644
 --- a/js/extra_settings_main.js
 +++ b/js/extra_settings_main.js
-@@ -477,7 +477,7 @@
+@@ -477,10 +477,38 @@
      var value = __cdbEx_readFileKey(p.json, __cdbEx_AAG_KEY);
      return { value: __cdbEx_aagValid(value) ? value : 0, locked: false, warning: warning };
    }
@@ -28,7 +37,38 @@ index 8a47701..75961ce 100644
      globalThis.__cdbAutoArchiveMergeDelayMinutes = function () { return __cdbEx_aagPref().value; };
    }
  
-@@ -661,6 +661,8 @@
++  // --- Code: cache warmer (community) -----------------------------------------
++  // patches/community/add_feature_cache_warm.nim asks globalThis.__cdbCacheWarmConfig() at every
++  // turn end and every timer fire. Key cacheWarm = {enabled, hours, rewrites}: off by default and
++  // the absence of the key. A valid object in the .jsonc wins and locks the row; an invalid one is
++  // reported as a warning and ignored. No cache: a change applies from the next turn.
++  var __cdbEx_CW_KEY = "cacheWarm";
++  var __cdbEx_CW_DEFAULT = { enabled: false, hours: 3, rewrites: 1 };
++  function __cdbEx_cwValid(v) {
++    return !!v && typeof v === "object" && !Array.isArray(v) && typeof v.enabled === "boolean" &&
++      Number.isInteger(v.hours) && v.hours >= 1 && v.hours <= 24 &&
++      typeof v.rewrites === "number" && isFinite(v.rewrites) && v.rewrites >= 0 && v.rewrites <= 10;
++  }
++  function __cdbEx_cwPref() {
++    var p = __cdbEx_paths();
++    var jsonc = __cdbEx_readFileKey(p.jsonc, __cdbEx_CW_KEY);
++    if (__cdbEx_cwValid(jsonc)) return { value: jsonc, locked: true };
++    var warning = jsonc === undefined ? null :
++      "Ignoring " + __cdbEx_CW_KEY + " in claude-desktop-extra.jsonc: expected {enabled: boolean, hours: whole number 1-24, rewrites: number 0-10}";
++    var value = __cdbEx_readFileKey(p.json, __cdbEx_CW_KEY);
++    return { value: __cdbEx_cwValid(value) ? value : __cdbEx_CW_DEFAULT, locked: false, warning: warning };
++  }
++  if (process.platform === "linux" || process.platform === "win32") {
++    globalThis.__cdbCacheWarmConfig = function () {
++      var v = __cdbEx_cwPref().value, ttl = process.env.CLAUDE_CODE_PROMPT_CACHE_TTL;
++      return { enabled: v.enabled, hours: v.hours, rewrites: v.rewrites, ttlEnv: ttl === "5m" || ttl === "1h" ? ttl : undefined };
++    };
++  }
++
+   // --- Computer Use: read app controls through AT-SPI (issue #306) ---------
+   // Same shape as the tray switch above. The Computer Use patch asks
+   // globalThis.__cdbCuAxElements?.() on every call that could involve the
+@@ -661,6 +689,8 @@
    function __cdbEx_3pDir() {
      var ud = _app.getPath("userData");
      if (process.env.CLAUDE_USER_DATA_DIR) return ud;
@@ -37,7 +77,7 @@ index 8a47701..75961ce 100644
      return /-3p$/.test(ud) ? ud : ud + "-3p";
    }
  
-@@ -3904,6 +3906,29 @@
+@@ -3904,6 +3934,29 @@
        if (typeof globalThis.__cdbGithubAlertsRefresh === "function") globalThis.__cdbGithubAlertsRefresh();
        return { ok: true, enabled: enabled, path: res.path };
      },
@@ -67,7 +107,31 @@ index 8a47701..75961ce 100644
      // Reduced projection of the theme registry. cdb-themes:apply / :active stay
      // owned by the theme picker patch; only this list is ours, because the full
      // entries carry every token of every palette.
-@@ -4755,8 +4780,6 @@
+@@ -4116,6 +4169,23 @@
+       if (res.ok) { try { globalThis.__cdbArchiveGraceWebRefresh?.(); } catch (e) {} }
+       return res.ok ? { ok: true, minutes: minutes, path: res.path, warning: __cdbEx_aagPref().warning || null } : res;
+     },
++    "cdb-cache-warm:read": function () {
++      var s = __cdbEx_cwPref();
++      return { ok: true, enabled: s.value.enabled, hours: s.value.hours, rewrites: s.value.rewrites,
++        lockedByJsonc: s.locked ? true : null, warning: s.warning || null };
++    },
++    "cdb-cache-warm:set": function (v) {
++      if (!__cdbEx_cwValid(v)) return { ok: false, error: "expected {enabled: boolean, hours: whole number 1-24, rewrites: number 0-10}" };
++      if (__cdbEx_cwPref().locked) return { ok: false, lockedByJsonc: true,
++        error: __cdbEx_CW_KEY + " is set in claude-desktop-extra.jsonc - edit that file to change it" };
++      var value = { enabled: v.enabled, hours: v.hours, rewrites: v.rewrites };
++      var res = __cdbEx_writeCfg(function (cfg) {
++        if (!value.enabled && value.hours === __cdbEx_CW_DEFAULT.hours && value.rewrites === __cdbEx_CW_DEFAULT.rewrites) delete cfg[__cdbEx_CW_KEY];
++        else cfg[__cdbEx_CW_KEY] = value;
++        return value;
++      });
++      return res.ok ? { ok: true, path: res.path, warning: __cdbEx_cwPref().warning || null } : res;
++    },
+     // "Keep this session" in the 1P Code page: upstream's per-session
+     // "Auto-archive on merge or close" = false, through the engine's own
+     // session manager (js/auto_archive_grace.js defines the hook once the
+@@ -4755,8 +4825,6 @@
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix author option is Linux only" }; };
        } else if (ch.indexOf("cdb-tray:") === 0) {
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the tray icon switch is Linux only" }; };
@@ -77,7 +141,7 @@ index 8a47701..75961ce 100644
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix ready-to-merge wake is Linux only" }; };
        } else if (ch.indexOf("cdb-session-start:") === 0) {
 diff --git a/js/extra_settings_page.js b/js/extra_settings_page.js
-index 93b6a45..90c11ca 100644
+index 93b6a45..a6a7eda 100644
 --- a/js/extra_settings_page.js
 +++ b/js/extra_settings_page.js
 @@ -588,12 +588,12 @@
@@ -110,7 +174,72 @@ index 93b6a45..90c11ca 100644
      restart.addEventListener("click", function () {
        restart.disabled = true;
        restart.textContent = "Restarting...";
-@@ -4004,6 +4004,25 @@
+@@ -3271,6 +3271,64 @@
+     return { head: head, host: host, spec: spec };
+   }
+ 
++  // --- Code: cache warmer ---------------------------------------------------
++  // Main side: cdb-cache-warm:* in extra_settings_main.js; the patch is
++  // patches/community/add_feature_cache_warm.nim. One switch and the two caps.
++  function renderCacheWarmRow(panel) {
++    var api = window.cdbExtra;
++    if (!api || typeof api.cacheWarmRead !== "function" || typeof api.cacheWarmSet !== "function") return;
++    var spec = { title: "Cache warmer",
++      note: "Sends one short turn to an idle Code session just before its prompt cache would lapse, so your " +
++        "next message still reads the cache instead of rewriting it. Each turn is visible in the chat and " +
++        "uses a little quota. It stops at whichever limit below is hit first. Applies live.",
++      keywords: "prompt cache keep warm keepalive ttl poke idle quota caffeine" };
++    var head = el("div", "cdbx-sec-h");
++    var host = el("div", "cdbx-list"), row = el("div", "cdbx-row"), main = el("div", "cdbx-row-main");
++    main.appendChild(el("div", "cdbx-id", spec.title)); main.appendChild(el("div", "cdbx-note", spec.note));
++    var onLabel = el("label", "cdbx-note", "Keep idle sessions warm"); onLabel.htmlFor = "cdbx-cache-warm-on";
++    var on = el("input"); on.type = "checkbox"; on.id = onLabel.htmlFor;
++    function number(id, text, min, max, step) {
++      var label = el("label", "cdbx-note", text); label.htmlFor = id;
++      var input = el("input", "cdbx-input"); input.id = id; input.type = "number";
++      input.min = min; input.max = max; input.step = step;
++      return { label: label, input: input };
++    }
++    var hours = number("cdbx-cache-warm-hours", "Stop after this many hours without a message (1-24)", "1", "24", "1");
++    var rewrites = number("cdbx-cache-warm-rewrites", "Stop after spending this many cache rewrites' worth (0-10, 0 = no limit)", "0", "10", "0.5");
++    var save = el("button", "cdbx-btn", "Save cache warmer"); save.type = "button";
++    var state = el("div", "cdbx-state", "Loading..."); state.setAttribute("role", "status"); state.setAttribute("aria-live", "polite");
++    var busy = false, locked = true;
++    function controls() { on.disabled = hours.input.disabled = rewrites.input.disabled = save.disabled = busy || locked; }
++    function show(res) {
++      if (failed(res)) { state.textContent = "Unavailable: " + reason(res); controls(); return; }
++      locked = !!res.lockedByJsonc;
++      on.checked = res.enabled === true; hours.input.value = String(res.hours); rewrites.input.value = String(res.rewrites);
++      controls();
++      state.textContent = (res.warning ? res.warning + ". " : "") + (res.enabled ? "On" : "Off") +
++        (locked ? " - set in claude-desktop-extra.jsonc; edit that file to change this" : " - applies live");
++    }
++    save.addEventListener("click", function () {
++      if (busy || locked) return;
++      var value = { enabled: on.checked, hours: Number(hours.input.value), rewrites: Number(rewrites.input.value) };
++      if (!Number.isInteger(value.hours) || value.hours < 1 || value.hours > 24) {
++        state.textContent = "Hours: a whole number from 1 to 24."; hours.input.focus(); return;
++      }
++      if (!isFinite(value.rewrites) || value.rewrites < 0 || value.rewrites > 10) {
++        state.textContent = "Rewrites: a number from 0 to 10."; rewrites.input.focus(); return;
++      }
++      busy = true; controls(); state.textContent = "Saving...";
++      api.cacheWarmSet(value).then(function (res) {
++        busy = false;
++        if (failed(res)) { controls(); state.textContent = "Could not save: " + reason(res); return; }
++        api.cacheWarmRead().then(show); toast("Cache warmer saved");
++      }, function (error) { busy = false; controls(); state.textContent = "Could not save: " + String(error); });
++    });
++    [onLabel, on, hours.label, hours.input, rewrites.label, rewrites.input, save, state].forEach(function (node) { main.appendChild(node); });
++    row.appendChild(main); host.appendChild(row); panel.appendChild(head); panel.appendChild(host); controls();
++    api.cacheWarmRead().then(show, function (error) { state.textContent = "Unavailable: " + String(error); });
++    return { head: head, host: host, spec: spec };
++  }
++
+   // --- Code: Auto-fix notices (ready to merge, comments after merge) -------
+   // Off by default. Main side: cdb-autofix-merge-ready:* in
+   // js/extra_settings_main.js; the wrappers in
+@@ -4004,6 +4062,25 @@
      });
    }
  
@@ -136,7 +265,15 @@ index 93b6a45..90c11ca 100644
    function renderGithubAlertsRow(panel) {
      return renderToggleRow(panel, {
        section: "Chat appearance",
-@@ -4255,6 +4274,7 @@
+@@ -4238,6 +4315,7 @@
+       renderTranscriptLimitsRow,
+       renderSessionStartAlwaysAllowRow,
+       renderJiraTrackerRow,
++      renderCacheWarmRow,
+       { title: "Pull requests", sub: "Auto-fix and auto-archive for your GitHub PRs", items: [
+         renderAutoFixAuthorRow,
+         renderAutoFixMergeReadyRow,
+@@ -4255,6 +4333,7 @@
        renderFrostedReplyFieldRow,
        renderGithubAlertsRow,
        renderGithubAlertIconsRow,
@@ -144,7 +281,7 @@ index 93b6a45..90c11ca 100644
        renderDevToolsRow
      ] },
      { title: "Models and 3P", sub: "Extra models and gateway options", items: [
-@@ -4265,6 +4285,28 @@
+@@ -4265,6 +4344,28 @@
        renderCuEscapeAbortRow
      ] }
    ];
@@ -155,7 +292,7 @@ index 93b6a45..90c11ca 100644
 +  if (/^Win/.test((typeof navigator !== "undefined" && navigator.platform) || "")) {
 +    var WINDOWS_ROWS = [renderDiffViewsRow, renderPanelTabsRow, renderFilesQuickOpenRow, renderCustomModelsRow,
 +      renderAllowNonAnthropicModelsRow, renderTranscriptLimitsRow, renderThemePickerRow, renderDevToolsRow,
-+      renderAutoArchiveGraceRow, renderJiraTrackerRow, renderUsageStatusRow];
++      renderAutoArchiveGraceRow, renderJiraTrackerRow, renderUsageStatusRow, renderCacheWarmRow];
 +    var keepWindowsRows = function (items) {
 +      var out = [];
 +      items.forEach(function (it) {
@@ -173,7 +310,7 @@ index 93b6a45..90c11ca 100644
  
    function renderFeatures(panel) {
      clear(panel);
-@@ -4711,7 +4753,7 @@
+@@ -4711,7 +4812,7 @@
  
  
        var files = el("div", "cdbx-note cdbx-models-files",
@@ -182,7 +319,7 @@ index 93b6a45..90c11ca 100644
          "Routing changes (a key, a model, a provider) reach open sessions at once through " + (st.paths && st.paths.routes) +
          ". New models show in the picker after the Code tab reloads. Sub-agent types, the default sub-agent " +
          "model, the small/fast model and the system-prompt line are handed to each session as it opens. A " +
-@@ -5029,7 +5071,7 @@
+@@ -5029,7 +5130,7 @@
        var url = field(form, "Base URL", input("text", existing ? existing.baseUrl : "", "https://api.example.com/anthropic"),
          "The Anthropic-compatible endpoint; /v1/messages is appended.");
        var key = field(form, "API key", input("password", "", existing && existing.keyOk ? "stored - type to replace" : "API key"),
@@ -191,7 +328,7 @@ index 93b6a45..90c11ca 100644
        var modelsUrl = field(form, "Models list URL", input("text", existing ? existing.modelsUrl || "" : "", "optional - found automatically"),
          "Where the provider lists its models (GET, OpenAI or Anthropic shape), on the base URL's host - the key " +
          "goes nowhere else. Left empty, fetch models tries the preset's address, then <base URL>/v1/models, " +
-@@ -5535,9 +5577,8 @@
+@@ -5535,9 +5636,8 @@
      var notice = el("div", "cdbx-notice");
      notice.appendChild(el("div", "cdbx-notice-title", "Changes here require a restart of Claude Desktop"));
      notice.appendChild(el("div", "cdbx-notice-body",

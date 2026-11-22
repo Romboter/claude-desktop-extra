@@ -32,7 +32,9 @@ proc installFor(manager: string): string =
     ".getSession(i);if(!v||v.isArchived)return{delivered:false,reason:\"gone\"};" &
     "if(v.isRunning||v.turnRunning)return{delivered:false,reason:\"busy\"};return await " & manager &
     ".sendMessage(i,\"" & pokeText &
-    "\",void 0,{origin:{kind:\"auto-continuation\"},initiator:\"cache-warm\",messageUuid:u})}})}catch(__cdbCwE){" &
+    "\",void 0,{origin:{kind:\"auto-continuation\"},initiator:\"cache-warm\",messageUuid:u})}});" &
+    "{let n=0;const w=()=>globalThis.__cdbDiag?globalThis.__cdbDiag(\"[cache-warm] installed\"):n++<60&&setTimeout(w,500);w()}" &
+    "}catch(__cdbCwE){" &
     diag & "}"
 
 proc hookFor(session, health, usage, completed: string): string =

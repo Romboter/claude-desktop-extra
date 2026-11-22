@@ -64,6 +64,7 @@ test("a duplicated anchor exits 1", () => {
 test("switch off (no config): the original behaviour, no timer, nothing sent", async () => {
   const w = load(run(fixture).text);
   w.sandbox.c5t(w.manager);
+  assert.ok(w.diag.includes("[cache-warm] installed"), "the startup line the Windows smoke test waits for");
   const out = w.sandbox.Ti({ sessionId: "s", pendingCycle: { userMessageUuid: "u1" } }, healthy);
   assert.equal(out, "orig:u1"); assert.equal(w.timers.length, 0); assert.equal(w.sent.length, 0);
 });
