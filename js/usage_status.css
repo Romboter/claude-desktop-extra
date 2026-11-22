@@ -13,6 +13,7 @@
 #usage-pace .up-meta { color: var(--cds-text-muted, color-mix(in srgb, currentColor 60%, transparent)); white-space: nowrap; font-variant-numeric: tabular-nums; }
 #usage-pace .up-track { position: relative; height: 4px; border-radius: 99px; background: color-mix(in srgb, currentColor 16%, transparent); }
 #usage-pace .up-fill { height: 100%; border-radius: inherit; background: var(--cds-fill-accent, #2a78d6); transition: width .2s ease-out; }
+#usage-pace .up-fill.up-ctx-full { background: var(--cds-fill-warning, #e0913a); }
 
 /* Time line, in the sidebar and in Claude's usage popover */
 .up-time { position: relative; height: 3px; border-radius: 99px; background: color-mix(in srgb, currentColor 10%, transparent); }

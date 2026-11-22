@@ -319,6 +319,141 @@
       headerLabel.textContent = strings().title;
       headerPace.textContent = view.pace ?? '';
     }
+    syncSidebarContext();
+  }
+
+  // The open conversation's context as a last bar under the limits. It reads
+  // the rail's Context card (see railContext) while that is mounted, and
+  // otherwise asks Claude's own bridge for the same summary, so the bar also
+  // works with the rail hidden. Updated in place, never rebuilt, so it cannot
+  // loop.
+  function syncSidebarContext() {
+    if (!rows) return;
+    let row = rows.querySelector(':scope > .up-ctx-row');
+    const apiPct = ctxApi.id !== null && ctxApi.id === openSessionId() ? ctxApi.pct : null;
+    const pct = railContext()?.pct ?? apiPct;
+    if (pct === null) {
+      row?.remove();
+      return;
+    }
+    if (!row) {
+      row = element('div', 'up-row up-ctx-row');
+      const top = element('div', 'up-top');
+      top.append(element('span', 'up-label'), element('span', 'up-meta'));
+      const track = element('div', 'up-track');
+      track.append(element('div', 'up-fill'));
+      row.append(top, track);
+      rows.append(row);
+    }
+    const used = Math.round(pct) + '%';
+    // "Context 40%" on the left, "394K / 1M" on the right when the bridge gave
+    // token counts for this session.
+    setText(row.querySelector('.up-label'), strings().context + ' ' + used);
+    const tokens = ctxApi.id !== null && ctxApi.id === openSessionId() && ctxApi.used !== null && ctxApi.max !== null
+      ? formatTokens(ctxApi.used) + ' / ' + formatTokens(ctxApi.max)
+      : '';
+    setText(row.querySelector('.up-meta'), tokens);
+    const fill = row.querySelector('.up-fill');
+    if (fill.style.width !== used) fill.style.width = used;
+    fill.classList.toggle('up-ctx-full', pct >= 80);
+  }
+
+  // Context from Claude's preload bridge (window['claude.web'].LocalSessions):
+  // the summary the rail itself asks for, by the open session's id, which is
+  // the sidebar row's key without its "code:" prefix. Local sessions only.
+  let ctxApi = { id: null, pct: null, used: null, max: null };
+  let ctxFetching = false;
+
+  // 394636 -> "395K", 1000000 -> "1M", 1250000 -> "1.3M".
+  function formatTokens(count) {
+    const trim = (value) => String(Math.round(value * 10) / 10);
+    if (count >= 1_000_000) return trim(count / 1_000_000) + 'M';
+    if (count >= 1_000) return Math.round(count / 1_000) + 'K';
+    return String(Math.round(count));
+  }
+
+  function openSessionId() {
+    const main = document.querySelector('.dframe-nav-scroll [data-row-main-button][aria-current="page"], .dframe-nav-scroll [data-row-main-button][data-selected="focused"]');
+    const key = main?.closest('[data-row-key]')?.dataset.rowKey ?? '';
+    return key.startsWith('code:') ? key.slice(5) : null;
+  }
+
+  // A session that is still loading answers nothing; ask again a few times.
+  const CONTEXT_RETRY_MS = [1500, 4000, 10_000, 30_000];
+  let retryCount = 0;
+  let retryId = null;
+  let retryTimer = null;
+
+  // { pct, used, max } from a summary; used and max are null without counts.
+  function readContext(result) {
+    const max = result?.rawMaxTokens > 0 ? result.rawMaxTokens : null;
+    const used = Number.isFinite(result?.totalTokens) ? result.totalTokens : null;
+    let pct = Number.isFinite(result?.percentage) ? result.percentage : null;
+    if (pct === null && max !== null && used !== null) pct = (used / max) * 100;
+    return pct === null ? null : { pct, used: max === null ? null : used, max };
+  }
+
+  async function refreshContext() {
+    if (stopped || ctxFetching) return;
+    const id = openSessionId();
+    const api = window['claude.web']?.LocalSessions;
+    if (!id || typeof api?.getContextUsageSummary !== 'function') {
+      if (ctxApi.id !== id || ctxApi.pct !== null) {
+        ctxApi = { id, pct: null, used: null, max: null };
+        if (view) syncSidebarContext();
+      }
+      return;
+    }
+    if (retryId !== id) {
+      retryId = id;
+      retryCount = 0;
+      clearTimeout(retryTimer);
+    }
+    ctxFetching = true;
+    try {
+      let got = readContext(await api.getContextUsageSummary(id));
+      if (got === null && typeof api.getContextUsage === 'function') got = readContext(await api.getContextUsage(id));
+      if (!stopped && id === openSessionId()) {
+        // A turn in progress answers nothing: keep what this session showed.
+        ctxApi = got === null
+          ? (ctxApi.id === id ? ctxApi : { id, pct: null, used: null, max: null })
+          : { id, pct: clamp(got.pct, 0, 100), used: got.used, max: got.max };
+        if (view) syncSidebarContext();
+        clearTimeout(retryTimer);
+        if (got !== null) retryCount = 0;
+        else if (retryCount < CONTEXT_RETRY_MS.length) retryTimer = setTimeout(refreshContext, CONTEXT_RETRY_MS[retryCount++]);
+      }
+    } catch {} finally {
+      ctxFetching = false;
+    }
+  }
+
+  // The summary is asked for when a session opens, when the open session's
+  // turn ends, and every 15 seconds while its turn runs. Nothing runs while
+  // it is idle.
+  let lastOpenId = null;
+  let lastOpenState = null;
+  let midTurnTimer = null;
+  const MID_TURN_MS = 15_000;
+
+  function scheduleMidTurn() {
+    midTurnTimer = setTimeout(() => {
+      refreshContext();
+      scheduleMidTurn();
+    }, MID_TURN_MS);
+  }
+
+  function noteOpenState(id, state) {
+    const was = lastOpenId === id ? lastOpenState : null;
+    lastOpenId = id;
+    lastOpenState = state;
+    if (was === state) return;
+    clearTimeout(midTurnTimer);
+    if (state === 'running') {
+      scheduleMidTurn();
+    } else if (was === 'running') {
+      refreshContext();
+    }
   }
 
   function place() {
@@ -675,6 +810,10 @@
       const state = inferReady(main, sessionState(main.closest('[data-row]') ?? main));
       setAttribute(main, 'data-up-session', state ?? 'idle');
       setAttribute(main, 'data-up-badge', badges[state] ?? null);
+      if (main.getAttribute('aria-current') === 'page' || main.dataset.selected === 'focused') {
+        const key = main.closest('[data-row-key]')?.dataset.rowKey ?? '';
+        if (key.startsWith('code:')) noteOpenState(key.slice(5), state ?? 'idle');
+      }
     }
   }
 
@@ -773,6 +912,7 @@
       markSessions();
       applyColors();
       enhanceMenu();
+      if (ctxApi.id !== openSessionId()) refreshContext();
     });
   }
 
@@ -788,6 +928,7 @@
     place();
     enhancePopover();
     markSessions();
+    if (ctxApi.id !== openSessionId()) refreshContext();
   }
 
   async function fetchJson(path) {
@@ -877,6 +1018,7 @@
   // popover is enhanced before it paints; the sidebar is re-placed shortly after.
   observe(() => {
     enhancePopover();
+    if (view) syncSidebarContext();
     scheduleMarkSessions();
     if (scheduled) return;
     scheduled = setTimeout(() => {
@@ -885,9 +1027,12 @@
     }, 250);
   }, document.body, { childList: true, subtree: true });
   // The rail's context headline and its Compact button change in place.
-  observe(enhancePopover, document.body, { subtree: true, characterData: true, attributeFilter: ['data-rail-context-pct', 'disabled'] });
+  observe(() => {
+    enhancePopover();
+    if (view) syncSidebarContext();
+  }, document.body, { subtree: true, characterData: true, attributeFilter: ['data-rail-context-pct', 'disabled'] });
   // A row's state changes in place too.
-  observe(scheduleMarkSessions, document.body, { subtree: true, attributeFilter: ['data-kind', 'data-attention', 'aria-label'] });
+  observe(scheduleMarkSessions, document.body, { subtree: true, attributeFilter: ['data-kind', 'data-attention', 'aria-label', 'aria-current', 'data-selected'] });
 
   // Follow Claude's language setting right away.
   observe(render, document.documentElement, { attributes: true, attributeFilter: ['lang'] });
@@ -905,6 +1050,8 @@
   // Removes everything this run added to the page and stops its work.
   window.__cdbUsageStatusTeardown = function () {
     stopped = true;
+    clearTimeout(midTurnTimer);
+    clearTimeout(retryTimer);
     stop.abort();
     observers.forEach((observer) => observer.disconnect());
     clearTimeout(timer);
