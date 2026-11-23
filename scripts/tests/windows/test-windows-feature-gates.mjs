@@ -75,6 +75,12 @@ for (const [platform, want] of [["win32", true], ["linux", false], ["darwin", fa
      "usage_status_main.js: " + (want ? "on" : "off") + " for " + platform);
 }
 
+// Files tab activity: same shape as usage status, Windows only.
+for (const [platform, want] of [["win32", true], ["linux", false], ["darwin", false]]) {
+  ok(!!run("files_activity_main.js", platform).__cdbFilesActivityMain === want,
+     "files_activity_main.js: " + (want ? "on" : "off") + " for " + platform);
+}
+
 // Allow non-Anthropic models leaves an always-false stub when gated off.
 {
   const on = run("allow_non_anthropic_models.js", "win32").__cdbAllowNonAnthropicModels;

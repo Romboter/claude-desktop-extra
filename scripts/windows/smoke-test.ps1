@@ -23,7 +23,7 @@ try {
   $want = @("profile 'ci' (requested)", '[ExtraSettings] Extra settings area armed', '[custom-models] installed (main)',
     '[cdb-models] installed', '[CustomThemes] Active theme: nord', '[ThemePicker] Ctrl+Shift+T armed', '[cdb-devtools] installed',
     '[DiffViews] installed (main)', '[files-quick-open] installed (main)', '[panel-tabs] installed (main)',
-    '[transcript-limits] installed (main)', '[cdb-jira] installed; switch', '[archive-grace] installed (main)', '[win-update] armed', '[cache-warm] installed')
+    '[transcript-limits] installed (main)', '[cdb-jira] installed; switch', '[archive-grace] installed (main)', '[win-update] armed', '[cache-warm] installed', '[files-activity] installed (main)')
   $deadline = (Get-Date).AddSeconds(120)
   do {
     Start-Sleep -Seconds 5

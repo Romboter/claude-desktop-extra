@@ -1,0 +1,33 @@
+/*
+ * files_activity.css - the shimmer for "Files tab activity" (Windows build).
+ * Inserted by js/files_activity_main.js. The page script only sets data-fa-tone
+ * (the touched file's row) and data-fa-dim (folders opened to reach it).
+ * The name is the row's child <button>. Dark-theme palettes from the
+ * filetree plugin; the band sweeps across the name's own text.
+ */
+[data-fa-tone=orange] > button { --fa0: #f97316; --fa1: #fb923c; --fa2: #fdba74; --fa3: #ffedd5; }
+[data-fa-tone=purple] > button { --fa0: #a855f7; --fa1: #c084fc; --fa2: #d8b4fe; --fa3: #f3e8ff; }
+[data-fa-tone=green] > button { --fa0: #22c55e; --fa1: #4ade80; --fa2: #86efac; --fa3: #dcfce7; }
+[data-fa-dim=orange] > button { -webkit-text-fill-color: #a3562a; }
+[data-fa-dim=purple] > button { -webkit-text-fill-color: #7d3cb2; }
+[data-fa-dim=green] > button { -webkit-text-fill-color: #1b6838; }
+
+@keyframes cdb-fa-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+
+[data-fa-tone] > button {
+  font-weight: 600;
+  background-image: linear-gradient(90deg, var(--fa0) 0%, var(--fa0) 35%, var(--fa1) 42%, var(--fa2) 46%,
+    var(--fa3) 50%, var(--fa2) 54%, var(--fa1) 58%, var(--fa0) 65%, var(--fa0) 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: cdb-fa-sweep 2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-fa-tone] > button { animation: none; background-position: 50% 0; }
+}

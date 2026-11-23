@@ -51,6 +51,7 @@ on:
       - 'js/extra_settings_*.js'
       - 'scripts/apply_patches.py'
       - 'js/cache_warm.js'
+      - 'js/files_activity*'
       - 'patches/Makefile'
       - 'scripts/tests/community/test-custom-models-main.mjs'
       - 'scripts/tests/core/test-extra-settings-dom.mjs'
@@ -196,7 +197,8 @@ jobs:
             '[cdb-jira] installed; switch',
             '[archive-grace] installed (main)',
             '[win-update] armed',
-            '[usage-status] installed (main)'
+            '[usage-status] installed (main)',
+            '[files-activity] installed (main)'
           )
           do {
             Start-Sleep -Seconds 5

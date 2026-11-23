@@ -1,8 +1,8 @@
 diff --git a/js/extra_settings_bridge.js b/js/extra_settings_bridge.js
-index 3081a1b..1690eb3 100644
+index 3081a1b..d79b5c5 100644
 --- a/js/extra_settings_bridge.js
 +++ b/js/extra_settings_bridge.js
-@@ -63,6 +63,12 @@
+@@ -63,6 +63,18 @@
      githubAlertsSet: function (enabled) {
        return ipcRenderer.invoke("cdb-github-alerts:set", enabled === true);
      },
@@ -12,10 +12,16 @@ index 3081a1b..1690eb3 100644
 +    usageStatusSet: function (enabled) {
 +      return ipcRenderer.invoke("cdb-usage-status:set", enabled === true);
 +    },
++    filesActivityRead: function () {
++      return ipcRenderer.invoke("cdb-files-activity:read");
++    },
++    filesActivitySet: function (enabled) {
++      return ipcRenderer.invoke("cdb-files-activity:set", enabled === true);
++    },
      githubAlertIconsRead: function () {
        return ipcRenderer.invoke("cdb-alert-icons:read");
      },
-@@ -173,6 +179,8 @@
+@@ -173,6 +185,8 @@
  
      autoArchiveGraceRead: function (sessionId) { return sessionId === undefined ? ipcRenderer.invoke("cdb-archive-grace:read") : ipcRenderer.invoke("cdb-archive-grace:read", sessionId); },
      autoArchiveGraceSet: function (minutes) { return ipcRenderer.invoke("cdb-archive-grace:set", minutes); },
@@ -25,7 +31,7 @@ index 3081a1b..1690eb3 100644
      // the session id only; main validates it and writes upstream's own
      // per-session "Auto-archive on merge or close" = false.
 diff --git a/js/extra_settings_main.js b/js/extra_settings_main.js
-index 8a47701..0c8cc9e 100644
+index 8a47701..f890116 100644
 --- a/js/extra_settings_main.js
 +++ b/js/extra_settings_main.js
 @@ -477,10 +477,38 @@
@@ -77,7 +83,7 @@ index 8a47701..0c8cc9e 100644
      return /-3p$/.test(ud) ? ud : ud + "-3p";
    }
  
-@@ -3904,6 +3934,29 @@
+@@ -3904,6 +3934,52 @@
        if (typeof globalThis.__cdbGithubAlertsRefresh === "function") globalThis.__cdbGithubAlertsRefresh();
        return { ok: true, enabled: enabled, path: res.path };
      },
@@ -104,10 +110,33 @@ index 8a47701..0c8cc9e 100644
 +      if (typeof globalThis.__cdbUsageStatusRefresh === "function") globalThis.__cdbUsageStatusRefresh();
 +      return { ok: true, enabled: enabled, path: res.path };
 +    },
++    // Files tab activity (Windows build: patches/windows/add_files_activity.nim).
++    // Same contract as usage status: the module reads the key on every page load;
++    // the set handler saves it and asks the main half to re-run the page script.
++    "cdb-files-activity:read": function () {
++      var p = __cdbEx_paths();
++      var jsonc = __cdbEx_readFileKey(p.jsonc, "filesActivity");
++      var json = __cdbEx_readFileKey(p.json, "filesActivity");
++      return { ok: true, enabled: (jsonc === undefined ? json : jsonc) === true,
++        lockedByJsonc: jsonc !== undefined ? true : null };
++    },
++    "cdb-files-activity:set": function (enabled) {
++      if (typeof enabled !== "boolean") return { ok: false, error: "enabled must be a boolean" };
++      if (__cdbEx_readFileKey(__cdbEx_paths().jsonc, "filesActivity") !== undefined) {
++        return { ok: false, lockedByJsonc: true, error: "filesActivity is set in claude-desktop-extra.jsonc - edit that file to change it" };
++      }
++      var res = __cdbEx_writeCfg(function (cfg) {
++        if (enabled) cfg.filesActivity = true;
++        else delete cfg.filesActivity;
++      });
++      if (!res.ok) return res;
++      if (typeof globalThis.__cdbFilesActivityRefresh === "function") globalThis.__cdbFilesActivityRefresh();
++      return { ok: true, enabled: enabled, path: res.path };
++    },
      // Reduced projection of the theme registry. cdb-themes:apply / :active stay
      // owned by the theme picker patch; only this list is ours, because the full
      // entries carry every token of every palette.
-@@ -4116,6 +4169,23 @@
+@@ -4116,6 +4192,23 @@
        if (res.ok) { try { globalThis.__cdbArchiveGraceWebRefresh?.(); } catch (e) {} }
        return res.ok ? { ok: true, minutes: minutes, path: res.path, warning: __cdbEx_aagPref().warning || null } : res;
      },
@@ -131,7 +160,7 @@ index 8a47701..0c8cc9e 100644
      // "Keep this session" in the 1P Code page: upstream's per-session
      // "Auto-archive on merge or close" = false, through the engine's own
      // session manager (js/auto_archive_grace.js defines the hook once the
-@@ -4755,8 +4825,6 @@
+@@ -4755,8 +4848,6 @@
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix author option is Linux only" }; };
        } else if (ch.indexOf("cdb-tray:") === 0) {
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the tray icon switch is Linux only" }; };
@@ -141,7 +170,7 @@ index 8a47701..0c8cc9e 100644
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix ready-to-merge wake is Linux only" }; };
        } else if (ch.indexOf("cdb-session-start:") === 0) {
 diff --git a/js/extra_settings_page.js b/js/extra_settings_page.js
-index 93b6a45..07cb05a 100644
+index 93b6a45..2b80d0c 100644
 --- a/js/extra_settings_page.js
 +++ b/js/extra_settings_page.js
 @@ -588,12 +588,12 @@
@@ -239,7 +268,7 @@ index 93b6a45..07cb05a 100644
    // --- Code: Auto-fix notices (ready to merge, comments after merge) -------
    // Off by default. Main side: cdb-autofix-merge-ready:* in
    // js/extra_settings_main.js; the wrappers in
-@@ -4004,6 +4062,25 @@
+@@ -4004,6 +4062,44 @@
      });
    }
  
@@ -262,10 +291,29 @@ index 93b6a45..07cb05a 100644
 +    });
 +  }
 +
++  function renderFilesActivityRow(panel) {
++    return renderToggleRow(panel, {
++      section: "Files tab",
++      title: "Files tab activity",
++      note: "When Claude reads or edits a file under the session folder, the Files tab opens the folders to it " +
++        "and scrolls there, and the file name shimmers for a few seconds (purple for reads, orange for edits). " +
++        "Files outside the session folder are ignored. Applies live to open chats.",
++      keywords: "files tab tree follow claude shimmer activity reveal read edit write folder filetree",
++      ariaLabel: "Files tab activity",
++      read: "filesActivityRead", write: "filesActivitySet",
++      isOn: function (r) { return r.enabled === true; },
++      writeArg: function (on) { return on; },
++      describe: function (on) { return on ? "on - the Files tab follows Claude" : "off - the Files tab looks as shipped"; },
++      lockFile: "claude-desktop-extra.jsonc",
++      errorPrefix: "Could not change Files tab activity: ",
++      toast: function (on) { return on ? "Files tab activity enabled" : "Files tab activity disabled"; }
++    });
++  }
++
    function renderGithubAlertsRow(panel) {
      return renderToggleRow(panel, {
        section: "Chat appearance",
-@@ -4238,6 +4315,7 @@
+@@ -4238,6 +4334,7 @@
        renderTranscriptLimitsRow,
        renderSessionStartAlwaysAllowRow,
        renderJiraTrackerRow,
@@ -273,15 +321,16 @@ index 93b6a45..07cb05a 100644
        { title: "Pull requests", sub: "Auto-fix and auto-archive for your GitHub PRs", items: [
          renderAutoFixAuthorRow,
          renderAutoFixMergeReadyRow,
-@@ -4255,6 +4333,7 @@
+@@ -4255,6 +4352,8 @@
        renderFrostedReplyFieldRow,
        renderGithubAlertsRow,
        renderGithubAlertIconsRow,
 +      renderUsageStatusRow,
++      renderFilesActivityRow,
        renderDevToolsRow
      ] },
      { title: "Models and 3P", sub: "Extra models and gateway options", items: [
-@@ -4265,6 +4344,28 @@
+@@ -4265,6 +4364,28 @@
        renderCuEscapeAbortRow
      ] }
    ];
@@ -292,7 +341,7 @@ index 93b6a45..07cb05a 100644
 +  if (/^Win/.test((typeof navigator !== "undefined" && navigator.platform) || "")) {
 +    var WINDOWS_ROWS = [renderDiffViewsRow, renderPanelTabsRow, renderFilesQuickOpenRow, renderCustomModelsRow,
 +      renderAllowNonAnthropicModelsRow, renderTranscriptLimitsRow, renderThemePickerRow, renderDevToolsRow,
-+      renderAutoArchiveGraceRow, renderJiraTrackerRow, renderUsageStatusRow, renderCacheWarmRow];
++      renderAutoArchiveGraceRow, renderJiraTrackerRow, renderUsageStatusRow, renderCacheWarmRow, renderFilesActivityRow];
 +    var keepWindowsRows = function (items) {
 +      var out = [];
 +      items.forEach(function (it) {
@@ -310,7 +359,7 @@ index 93b6a45..07cb05a 100644
  
    function renderFeatures(panel, target) {
      clear(panel);
-@@ -4711,7 +4812,7 @@
+@@ -4711,7 +4832,7 @@
  
  
        var files = el("div", "cdbx-note cdbx-models-files",
@@ -319,7 +368,7 @@ index 93b6a45..07cb05a 100644
          "Routing changes (a key, a model, a provider) reach open sessions at once through " + (st.paths && st.paths.routes) +
          ". New models show in the picker after the Code tab reloads. Sub-agent types, the default sub-agent " +
          "model, the small/fast model and the system-prompt line are handed to each session as it opens. A " +
-@@ -5029,7 +5130,7 @@
+@@ -5029,7 +5150,7 @@
        var url = field(form, "Base URL", input("text", existing ? existing.baseUrl : "", "https://api.example.com/anthropic"),
          "The Anthropic-compatible endpoint; /v1/messages is appended.");
        var key = field(form, "API key", input("password", "", existing && existing.keyOk ? "stored - type to replace" : "API key"),
@@ -328,7 +377,7 @@ index 93b6a45..07cb05a 100644
        var modelsUrl = field(form, "Models list URL", input("text", existing ? existing.modelsUrl || "" : "", "optional - found automatically"),
          "Where the provider lists its models (GET, OpenAI or Anthropic shape), on the base URL's host - the key " +
          "goes nowhere else. Left empty, fetch models tries the preset's address, then <base URL>/v1/models, " +
-@@ -5535,9 +5636,8 @@
+@@ -5535,9 +5656,8 @@
      var notice = el("div", "cdbx-notice");
      notice.appendChild(el("div", "cdbx-notice-title", "Changes here require a restart of Claude Desktop"));
      notice.appendChild(el("div", "cdbx-notice-body",
