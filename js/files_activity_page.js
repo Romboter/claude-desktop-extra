@@ -281,7 +281,6 @@
     for (var i = 0; i < (list || []).length; i++) {
       var r = list[i], root = norm(r.root), files = {}, dirs = {}, k, p;
       if (!root) continue;
-      dirs[root] = true;
       for (k in r.files || {}) {
         files[root + "/" + k.toLowerCase()] = r.files[k];
         for (p = k.toLowerCase(); p.lastIndexOf("/") > 0;) { p = p.slice(0, p.lastIndexOf("/")); dirs[root + "/" + p] = true; }
@@ -292,6 +291,8 @@
         ut.push(u);
         for (p = u; p.length > root.length + 1 && p.lastIndexOf("/") > root.length; ) { p = p.slice(0, p.lastIndexOf("/")); dirs[p] = true; }
       }
+      // The repo folder gets the dot only when something in it changed.
+      if (ut.length || Object.keys(files).length) dirs[root] = true;
       out.push({ root: root, files: files, dirs: dirs, ut: ut });
     }
     git.repos = out;

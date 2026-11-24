@@ -107,6 +107,8 @@ ok(!rows[0].attrs["data-fa-dim"], "already open folders are not dimmed");
   ok(rows[1].btn.attrs["data-fa-git"] === "dir", "the repo folder gets the folder dot");
   ok(!rows[3].btn.attrs["data-fa-git"], "a folder outside the repo is left alone");
   ok(!rows[4].btn.attrs["data-fa-git"], "a row the app already marked keeps the app's mark");
+  api.setGit([{ root: "C:\\claude\\repos\\app", files: {}, ut: [] }]);
+  ok(!rows[1].btn.attrs["data-fa-git"] && !rows[2].btn.attrs["data-fa-git"], "a clean repo gets no dot on its folder");
   api.setGit([]);
   ok(!rows[2].btn.attrs["data-fa-git"] && !rows[1].btn.attrs["data-fa-git"], "an empty result clears the marks");
   api.setGit([{ root: "C:\\claude\\repos\\app", files: { "a.md": "M" }, ut: [] }]);
