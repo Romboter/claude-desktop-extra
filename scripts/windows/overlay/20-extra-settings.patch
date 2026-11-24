@@ -308,7 +308,7 @@ index 93b6a45..07cb05a 100644
 +    FEATURE_GROUPS = keepWindowsRows(FEATURE_GROUPS);
 +  }
  
-   function renderFeatures(panel) {
+   function renderFeatures(panel, target) {
      clear(panel);
 @@ -4711,7 +4812,7 @@
  
