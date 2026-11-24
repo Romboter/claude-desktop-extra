@@ -276,23 +276,30 @@
       return { cwd: cwd, dirs: dirs, focused: typeof document.hasFocus === "function" ? document.hasFocus() : true };
     });
   }
+  // A folder's dot takes the strongest change below it: conflict, modified,
+  // renamed, added, untracked.
+  var RANK = "U A R M !";
+  function stronger(a, b) { return !a || RANK.indexOf(b) > RANK.indexOf(a) ? b : a; }
   function setGit(list) {
     var out = [];
     for (var i = 0; i < (list || []).length; i++) {
-      var r = list[i], root = norm(r.root), files = {}, dirs = {}, k, p;
+      var r = list[i], root = norm(r.root), files = {}, dirs = {}, all = "", k, p;
       if (!root) continue;
       for (k in r.files || {}) {
-        files[root + "/" + k.toLowerCase()] = r.files[k];
-        for (p = k.toLowerCase(); p.lastIndexOf("/") > 0;) { p = p.slice(0, p.lastIndexOf("/")); dirs[root + "/" + p] = true; }
+        var m = r.files[k];
+        files[root + "/" + k.toLowerCase()] = m;
+        all = stronger(all, m);
+        for (p = k.toLowerCase(); p.lastIndexOf("/") > 0;) { p = p.slice(0, p.lastIndexOf("/")); dirs[root + "/" + p] = stronger(dirs[root + "/" + p], m); }
       }
       var ut = [];
       for (k = 0; k < (r.ut || []).length; k++) {
         var u = root + "/" + String(r.ut[k]).replace(/\/+$/, "").toLowerCase();
         ut.push(u);
-        for (p = u; p.length > root.length + 1 && p.lastIndexOf("/") > root.length; ) { p = p.slice(0, p.lastIndexOf("/")); dirs[p] = true; }
+        all = stronger(all, "U");
+        for (p = u; p.length > root.length + 1 && p.lastIndexOf("/") > root.length; ) { p = p.slice(0, p.lastIndexOf("/")); dirs[p] = stronger(dirs[p], "U"); }
       }
       // The repo folder gets the dot only when something in it changed.
-      if (ut.length || Object.keys(files).length) dirs[root] = true;
+      if (all) dirs[root] = all;
       out.push({ root: root, files: files, dirs: dirs, ut: ut });
     }
     git.repos = out;
@@ -306,8 +313,9 @@
     }
     if (!best) return null;
     if (isDir) {
-      if (best.dirs[path]) return "dir";
-      for (i = 0; i < best.ut.length; i++) if (under(best.ut[i], path)) return "dir";
+      var d = best.dirs[path];
+      for (i = 0; i < best.ut.length; i++) if (under(best.ut[i], path)) d = stronger(d, "U");
+      if (d) return "dir-" + d;
       return null;
     }
     if (best.files[path]) return best.files[path];

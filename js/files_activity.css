@@ -34,10 +34,17 @@
 
 /*
  * Git marks for nested repos: the page script sets data-fa-git on a row's name
- * button (M, A, U, R, ! or dir) where the app drew no mark of its own. The
- * mark is a pseudo-element, so the app's React tree is left alone. Colours are
- * the app's own git variables, as in its own marks.
+ * button where the app drew no mark of its own: a letter (M, A, U, R, !) on a
+ * file, or dir-<letter> on a folder holding changes (a dot in the colour of the
+ * strongest change inside). The mark is a pseudo-element, so the app's React
+ * tree is left alone. Colours are the app's own git variables.
  */
+button[data-fa-git=M], button[data-fa-git=dir-M] { --fa-git: light-dark(var(--code-theme-light-git-modified, var(--cds-text-tint-yellow)), var(--code-theme-dark-git-modified, var(--cds-text-tint-yellow))); }
+button[data-fa-git=A], button[data-fa-git=dir-A] { --fa-git: light-dark(var(--code-theme-light-git-added, var(--cds-text-tint-green)), var(--code-theme-dark-git-added, var(--cds-text-tint-green))); }
+button[data-fa-git=U], button[data-fa-git=dir-U] { --fa-git: light-dark(var(--code-theme-light-git-untracked, var(--cds-text-tint-green)), var(--code-theme-dark-git-untracked, var(--cds-text-tint-green))); }
+button[data-fa-git=R], button[data-fa-git=dir-R] { --fa-git: light-dark(var(--code-theme-light-git-renamed, var(--cds-text-tint-blue)), var(--code-theme-dark-git-renamed, var(--cds-text-tint-blue))); }
+button[data-fa-git="!"], button[data-fa-git="dir-!"] { --fa-git: light-dark(var(--code-theme-light-git-conflict, var(--cds-text-tint-red)), var(--code-theme-dark-git-conflict, var(--cds-text-tint-red))); }
+
 button[data-fa-git]::after {
   content: attr(data-fa-git);
   flex: none;
@@ -45,18 +52,14 @@ button[data-fa-git]::after {
   margin-inline-start: auto;
   text-align: center;
 }
-button[data-fa-git=dir]::after {
+button[data-fa-git]:not([data-fa-git^=dir]) { color: var(--fa-git); }
+button[data-fa-git^=dir]::after {
   content: "";
   width: 6px;
   height: 6px;
   margin-inline: auto 5px;
   align-self: center;
   border-radius: 50%;
-  background: light-dark(var(--code-theme-light-git-modified, var(--cds-text-tint-yellow)), var(--code-theme-dark-git-modified, var(--cds-text-tint-yellow)));
+  background: var(--fa-git);
   opacity: 0.5;
 }
-button[data-fa-git=M] { color: light-dark(var(--code-theme-light-git-modified, var(--cds-text-tint-yellow)), var(--code-theme-dark-git-modified, var(--cds-text-tint-yellow))); }
-button[data-fa-git=A] { color: light-dark(var(--code-theme-light-git-added, var(--cds-text-tint-green)), var(--code-theme-dark-git-added, var(--cds-text-tint-green))); }
-button[data-fa-git=U] { color: light-dark(var(--code-theme-light-git-untracked, var(--cds-text-tint-green)), var(--code-theme-dark-git-untracked, var(--cds-text-tint-green))); }
-button[data-fa-git=R] { color: light-dark(var(--code-theme-light-git-renamed, var(--cds-text-tint-blue)), var(--code-theme-dark-git-renamed, var(--cds-text-tint-blue))); }
-button[data-fa-git="!"] { color: light-dark(var(--code-theme-light-git-conflict, var(--cds-text-tint-red)), var(--code-theme-dark-git-conflict, var(--cds-text-tint-red))); }

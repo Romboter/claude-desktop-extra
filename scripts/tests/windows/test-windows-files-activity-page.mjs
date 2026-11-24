@@ -104,7 +104,12 @@ ok(!rows[0].attrs["data-fa-dim"], "already open folders are not dimmed");
   rows[4].btn.marked = true; // the app drew its own mark here (the other rows carry its empty span)
   api.setGit([{ root: "C:\\claude\\repos\\app", files: { "a.md": "M", "src/x.js": "A" }, ut: ["new/"] }]);
   ok(rows[2].btn.attrs["data-fa-git"] === "M", "a changed file in a nested repo gets its letter");
-  ok(rows[1].btn.attrs["data-fa-git"] === "dir", "the repo folder gets the folder dot");
+  ok(rows[1].btn.attrs["data-fa-git"] === "dir-M", "the repo folder dot follows the strongest change (modified beats added and untracked)");
+  api.setGit([{ root: "C:\\claude\\repos\\app", files: {}, ut: ["new/"] }]);
+  ok(rows[1].btn.attrs["data-fa-git"] === "dir-U", "a repo with only untracked changes gets the untracked dot");
+  api.setGit([{ root: "C:\\claude\\repos\\app", files: { "a.md": "A", "b.md": "R" }, ut: [] }]);
+  ok(rows[1].btn.attrs["data-fa-git"] === "dir-R", "renamed beats added");
+  api.setGit([{ root: "C:\\claude\\repos\\app", files: { "a.md": "M", "src/x.js": "A" }, ut: ["new/"] }]);
   ok(!rows[3].btn.attrs["data-fa-git"], "a folder outside the repo is left alone");
   ok(!rows[4].btn.attrs["data-fa-git"], "a row the app already marked keeps the app's mark");
   api.setGit([{ root: "C:\\claude\\repos\\app", files: {}, ut: [] }]);
