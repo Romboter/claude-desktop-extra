@@ -316,6 +316,15 @@
   function nameButton(row) {
     return row.querySelector ? row.querySelector(":scope > button") : null;
   }
+  // The app renders an empty mark span on every row (measured live: all 45 rows
+  // matched); only a changed file or folder has text or the folder dot in it.
+  function appMarked(b) {
+    var sp = b.querySelectorAll ? b.querySelectorAll('span[aria-hidden="true"].ms-auto') : [];
+    for (var i = 0; i < sp.length; i++) {
+      if (String(sp[i].textContent || "").trim() || (sp[i].querySelector && sp[i].querySelector(".rounded-full"))) return true;
+    }
+    return false;
+  }
   function clearGit() {
     var bs = document.querySelectorAll("[data-fa-git]");
     for (var i = 0; i < bs.length; i++) bs[i].removeAttribute("data-fa-git");
@@ -328,7 +337,7 @@
       if (!b) continue;
       var m = null;
       // A row the app already marked (its own repo) keeps the app's mark.
-      if (git.repos.length && !(b.querySelector && b.querySelector('span[aria-hidden="true"].ms-auto'))) {
+      if (git.repos.length && !appMarked(b)) {
         var e = entryOf(rows[i]);
         if (e) m = markOf(norm(e.absPath), e.isDirectory === true);
       }

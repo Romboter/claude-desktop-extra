@@ -26,7 +26,7 @@ function row(abs, isDirectory) {
   const attrs = {};
   const el = { attrs, setAttribute: (k, v) => { attrs[k] = String(v); }, removeAttribute: (k) => { delete attrs[k]; } };
   const btn = { attrs: {}, marked: false, setAttribute: (k, v) => { btn.attrs[k] = String(v); }, removeAttribute: (k) => { delete btn.attrs[k]; },
-    querySelector: () => (btn.marked ? {} : null) };
+    querySelectorAll: () => [{ textContent: btn.marked ? "M" : "", querySelector: () => null }] };
   el.btn = btn;
   el.querySelector = () => btn;
   el["__reactFiber$t"] = { memoizedProps: { entry: { absPath: abs, isDirectory } }, return: null };
@@ -101,7 +101,7 @@ ok(!rows[0].attrs["data-fa-dim"], "already open folders are not dimmed");
   const api = window.__cdbFilesActivity;
   const w = await api.wanted();
   ok(w && w.cwd === "C:\\claude" && w.dirs.includes("C:\\claude\\repos\\app"), "wanted() reports the session folder and the folders on screen");
-  rows[4].btn.marked = true; // the app drew its own mark here
+  rows[4].btn.marked = true; // the app drew its own mark here (the other rows carry its empty span)
   api.setGit([{ root: "C:\\claude\\repos\\app", files: { "a.md": "M", "src/x.js": "A" }, ut: ["new/"] }]);
   ok(rows[2].btn.attrs["data-fa-git"] === "M", "a changed file in a nested repo gets its letter");
   ok(rows[1].btn.attrs["data-fa-git"] === "dir", "the repo folder gets the folder dot");
