@@ -170,7 +170,7 @@ index 8a47701..f890116 100644
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix ready-to-merge wake is Linux only" }; };
        } else if (ch.indexOf("cdb-session-start:") === 0) {
 diff --git a/js/extra_settings_page.js b/js/extra_settings_page.js
-index 93b6a45..2b80d0c 100644
+index a81fa02..dab9a82 100644
 --- a/js/extra_settings_page.js
 +++ b/js/extra_settings_page.js
 @@ -588,12 +588,12 @@
@@ -192,7 +192,7 @@ index 93b6a45..2b80d0c 100644
    if (/^Win/.test((typeof navigator !== "undefined" && navigator.platform) || "")) {
      NAV_ITEMS = NAV_ITEMS.filter(function (it) { return WINDOWS_NAV[it.kind] === true; });
    }
-@@ -3067,8 +3067,8 @@
+@@ -3077,8 +3077,8 @@
    function restartButton() {
      var restart = el("button", "cdbx-btn", "Restart now");
      restart.type = "button";
@@ -203,7 +203,7 @@ index 93b6a45..2b80d0c 100644
      restart.addEventListener("click", function () {
        restart.disabled = true;
        restart.textContent = "Restarting...";
-@@ -3271,6 +3271,64 @@
+@@ -3281,6 +3281,64 @@
      return { head: head, host: host, spec: spec };
    }
  
@@ -268,7 +268,7 @@ index 93b6a45..2b80d0c 100644
    // --- Code: Auto-fix notices (ready to merge, comments after merge) -------
    // Off by default. Main side: cdb-autofix-merge-ready:* in
    // js/extra_settings_main.js; the wrappers in
-@@ -4004,6 +4062,44 @@
+@@ -4014,6 +4072,44 @@
      });
    }
  
@@ -313,7 +313,7 @@ index 93b6a45..2b80d0c 100644
    function renderGithubAlertsRow(panel) {
      return renderToggleRow(panel, {
        section: "Chat appearance",
-@@ -4238,6 +4334,7 @@
+@@ -4254,6 +4350,7 @@
        renderTranscriptLimitsRow,
        renderSessionStartAlwaysAllowRow,
        renderJiraTrackerRow,
@@ -321,7 +321,7 @@ index 93b6a45..2b80d0c 100644
        { title: "Pull requests", sub: "Auto-fix and auto-archive for your GitHub PRs", items: [
          renderAutoFixAuthorRow,
          renderAutoFixMergeReadyRow,
-@@ -4255,6 +4352,8 @@
+@@ -4271,6 +4368,8 @@
        renderFrostedReplyFieldRow,
        renderGithubAlertsRow,
        renderGithubAlertIconsRow,
@@ -330,7 +330,7 @@ index 93b6a45..2b80d0c 100644
        renderDevToolsRow
      ] },
      { title: "Models and 3P", sub: "Extra models and gateway options", items: [
-@@ -4265,6 +4364,28 @@
+@@ -4281,6 +4380,28 @@
        renderCuEscapeAbortRow
      ] }
    ];
@@ -359,7 +359,7 @@ index 93b6a45..2b80d0c 100644
  
    function renderFeatures(panel, target) {
      clear(panel);
-@@ -4711,7 +4832,7 @@
+@@ -4730,7 +4851,7 @@
  
  
        var files = el("div", "cdbx-note cdbx-models-files",
@@ -368,7 +368,7 @@ index 93b6a45..2b80d0c 100644
          "Routing changes (a key, a model, a provider) reach open sessions at once through " + (st.paths && st.paths.routes) +
          ". New models show in the picker after the Code tab reloads. Sub-agent types, the default sub-agent " +
          "model, the small/fast model and the system-prompt line are handed to each session as it opens. A " +
-@@ -5029,7 +5150,7 @@
+@@ -5048,7 +5169,7 @@
        var url = field(form, "Base URL", input("text", existing ? existing.baseUrl : "", "https://api.example.com/anthropic"),
          "The Anthropic-compatible endpoint; /v1/messages is appended.");
        var key = field(form, "API key", input("password", "", existing && existing.keyOk ? "stored - type to replace" : "API key"),
@@ -377,7 +377,7 @@ index 93b6a45..2b80d0c 100644
        var modelsUrl = field(form, "Models list URL", input("text", existing ? existing.modelsUrl || "" : "", "optional - found automatically"),
          "Where the provider lists its models (GET, OpenAI or Anthropic shape), on the base URL's host - the key " +
          "goes nowhere else. Left empty, fetch models tries the preset's address, then <base URL>/v1/models, " +
-@@ -5535,9 +5656,8 @@
+@@ -5554,9 +5675,8 @@
      var notice = el("div", "cdbx-notice");
      notice.appendChild(el("div", "cdbx-notice-title", "Changes here require a restart of Claude Desktop"));
      notice.appendChild(el("div", "cdbx-notice-body",
@@ -389,6 +389,51 @@ index 93b6a45..2b80d0c 100644
      var restart = restartButton();
      notice.appendChild(restart);
      panel.appendChild(notice);
+@@ -7299,7 +7419,23 @@
+     return baseTier + 1.5;
+   }
+ 
++  // Windows build: the index above is upstream's and lists Linux-only rows.
++  // Here only the Community rows of WINDOWS_ROWS are searchable (the titles
++  // below), plus these entries for the rows only this build has.
++  var WINDOWS_SEARCH_TITLES = ["Panel tabs", "Files quick open", "Diff view modes", "Load large sessions in full",
++    "Jira issue tracker", "Auto-archive delay after a PR merges or closes", "Theme picker", "Developer tools",
++    "Custom models", "Allow non-Anthropic models"];
++  var WINDOWS_SEARCH_EXTRA = [
++    { title: "Usage and session status",
++      keywords: "usage session status pace sidebar limits rate weekly five hour remaining" },
++    { title: "Cache warmer",
++      keywords: "prompt cache idle session ttl poke keep warm caffeine" },
++    { title: "Files tab activity",
++      keywords: "files tab follow claude shimmer nested repo git status marks folder dot code tab panel" }
++  ];
++
+   function searchExtraSettings(st, rawQuery) {
++    var onWindows = /^Win/.test((typeof navigator !== "undefined" && navigator.platform) || "");
+     var q = (rawQuery || "").trim().toLowerCase();
+     if (!q) return [];
+     var tokens = q.split(/\s+/).filter(Boolean);
+@@ -7341,6 +7477,8 @@
+     for (var j = 0; j < EXTRA_SEARCH_STATIC.length; j++) {
+       var item = EXTRA_SEARCH_STATIC[j];
+       if (!kinds[item.kind]) continue;
++      // Windows build: only the Community rows this build shows are searchable.
++      if (onWindows && item.kind === "features" && WINDOWS_SEARCH_TITLES.indexOf(item.title) < 0) continue;
+       pool.push({
+         kind: item.kind,
+         title: item.title,
+@@ -7350,6 +7488,11 @@
+         target: item.section ? { section: item.section } : item.rowTitle ? { rowTitle: item.rowTitle } : null
+       });
+     }
++    if (kinds.features) {
++      WINDOWS_SEARCH_EXTRA.forEach(function (x) {
++        pool.push({ kind: "features", title: x.title, keywords: x.keywords, tier: 2, minLen: 1, target: { rowTitle: x.title } });
++      });
++    }
+     for (var d = 0; d < st.dynamicItems.length; d++) {
+       var di = st.dynamicItems[d];
+       if (kinds[di.kind]) pool.push(di);
 diff --git a/js/theme_picker_page.html b/js/theme_picker_page.html
 index 1057cda..7bd636a 100644
 --- a/js/theme_picker_page.html
@@ -475,7 +520,7 @@ index f03ea70..0c45304 100644
        # Groups: 0 the cache assigned, 1 the cache the IIFE returns, 2 the memo,
        # 3 the getter, 4 the cache the getter returns. 0, 1 and 4 must agree.
 diff --git a/scripts/tests/core/test-extra-settings-dom.mjs b/scripts/tests/core/test-extra-settings-dom.mjs
-index 98ab8b2..c474eb2 100644
+index 402441e..671d349 100644
 --- a/scripts/tests/core/test-extra-settings-dom.mjs
 +++ b/scripts/tests/core/test-extra-settings-dom.mjs
 @@ -1108,7 +1108,7 @@ async function featuresPanel(featuresItem) {
@@ -487,7 +532,7 @@ index 98ab8b2..c474eb2 100644
      ok(titlesIn(topGroups[1]).join("|") === appOrder.filter(function (t) { return titlesIn(topGroups[1]).indexOf(t) >= 0; }).join("|") &&
         titlesIn(topGroups[1]).length >= 4,
         "App and window rows in order: " + titlesIn(topGroups[1]).join("|"));
-@@ -3835,11 +3835,34 @@ async function run() {
+@@ -4022,11 +4022,34 @@ async function run() {
    const box = navbox();
  
    // --- the Windows build: the page runs with navigator.platform "Win32" and
@@ -526,7 +571,7 @@ index 98ab8b2..c474eb2 100644
      window.__cmConfig = { ok: true, enabled: true, configured: true, lockedByJsonc: false, source: "default",
        surfaces: ["ccd", "code"], models: 1, webSearch: "", webSearchLocked: false,
        smallFastModel: "", smallFastModelLocked: false, searchConflict: "", subagentModel: "", subagentModelLocked: false,
-@@ -3855,8 +3878,8 @@ async function run() {
+@@ -4042,8 +4065,8 @@ async function run() {
          keySource: "stored", preset: "opencode-go", sessionHeader: "x-opencode-session", effort: ["low", "max"], context: "1m",
          models: [{ id: "glm-5.3", alias: "claude-glm-5.3", listedAs: ["claude-glm-5.3[1m]"], name: "GLM-5.3",
            description: "", vision: false, thinking: true, context: "1m", effort: ["low", "max"], effortDefault: "max", badge: "", agent: false }] }] };
@@ -537,7 +582,20 @@ index 98ab8b2..c474eb2 100644
        const winPanel = document.querySelector(".cdbx-panel");
        const winCard = winPanel && winPanel.querySelector(".cdbx-models-card");
        ok(!!winCard && /session header x-opencode-session/.test(winCard.querySelector(".cdbx-state").textContent),
-@@ -4450,6 +4473,8 @@ window.cdbExtra = {
+@@ -4081,10 +4104,10 @@ async function run() {
+         pop.appendChild(lb);
+         document.body.appendChild(pop);
+ 
+-        sIn.value = "jira";
++        sIn.value = "white tray icon";
+         sIn.dispatchEvent(new Event("input", { bubbles: true }));
+         await sleep(50);
+-        ok(!lb.querySelector(".cdbx-sr-wrap"), "Windows search: Linux-only setting (jira) produces no Extra results");
++        ok(!lb.querySelector(".cdbx-sr-wrap"), "Windows search: Linux-only setting (white tray icon) produces no Extra results");
+         ok(emptyEl.style.display !== "none", "Windows search: upstream empty state stays visible when no Extra match");
+ 
+         sIn.value = "deepseek";
+@@ -4673,6 +4696,8 @@ window.cdbExtra = {
    transparentChatComposerSet: function (on) { window.__transparentReply=on; return Promise.resolve({ok:true}); },
    githubAlertsRead: function () { return Promise.resolve(window.__ghAlertsState || { ok: true, enabled: !!window.__ghAlertsOn, lockedByJsonc: null }); },
    githubAlertsSet: function (on) { window.__ghAlertsCalls = (window.__ghAlertsCalls || []).concat([on]); window.__ghAlertsOn = on; return Promise.resolve({ ok: true, enabled: on }); },
