@@ -6,7 +6,7 @@
  * a rerun changes nothing, a stale or duplicated injection fails, and the
  * result parses. Exit 3 (SKIP) when the patch is not compiled.
  */
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
@@ -49,19 +49,51 @@ ok(syntax.status === 0, "patched file passes node --check" + (syntax.status ? ":
   writeFileSync(join(ud, "claude-desktop-extra.json"), '{"filesActivity":true}');
   const handlers = {}, created = [];
   const injected = { css: [], js: [] };
-  const wc = { getURL: () => "https://claude.ai/chat", isDestroyed: () => false, on: (e, f) => { handlers.dom = f; },
+  // A real nested repo under a session folder, for the git status poll.
+  const sess = mkdtempSync(join(tmpdir(), "cdb-fap-sess-"));
+  const gitOk = spawnSync("git", ["--version"]).status === 0;
+  if (gitOk) {
+    const repo = join(sess, "app");
+    const g = (...a) => spawnSync("git", ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", ...a], { encoding: "utf8" });
+    mkdirSync(repo);
+    g("init", "-q");
+    writeFileSync(join(repo, "a.md"), "one");
+    g("add", ".");
+    g("commit", "-qm", "init");
+    writeFileSync(join(repo, "a.md"), "two");
+    writeFileSync(join(repo, "new.md"), "x");
+  }
+  const pushed = [];
+  const wc = { once: () => {}, getURL: () => "https://claude.ai/chat", isDestroyed: () => false, on: (e, f) => { handlers.dom = f; },
     insertCSS: (c) => { injected.css.push(c); return Promise.resolve("k"); }, removeInsertedCSS: () => Promise.resolve(),
-    executeJavaScript: (s) => { injected.js.push(s); return Promise.resolve(); } };
+    executeJavaScript: (s) => {
+      if (s.includes(".wanted&&")) return Promise.resolve({ cwd: sess, dirs: [sess, join(sess, "app"), tmpdir()] });
+      if (s.includes(".setGit&&")) { pushed.push(s); return Promise.resolve(); }
+      injected.js.push(s); return Promise.resolve();
+    } };
   const electron = { app: { getPath: () => ud, on: (e, f) => { handlers[e] = f; }, whenReady: () => Promise.resolve() },
     webContents: { getAllWebContents: () => created } };
   const sandbox = { require: (m) => (m === "electron" ? electron : Module.createRequire(import.meta.url)(m)),
-    process: { platform: "win32", env: {}, pid: 1 }, console: { log() {} }, setTimeout, clearTimeout };
+    process: { platform: "win32", env: process.env, pid: 1 }, console: { log() {} }, setTimeout, clearTimeout, setInterval, clearInterval, JSON, Object };
   sandbox.globalThis = sandbox;
   vm.runInContext(once, vm.createContext(sandbox));
   handlers["web-contents-created"]({}, wc);
   handlers.dom();
   ok(injected.css[0] === CSS, "embedded stylesheet equals js/files_activity.css");
   ok(injected.js[0] && injected.js[0].endsWith(PAGE), "embedded page script equals js/files_activity_page.js");
+  if (gitOk) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const msg = pushed.length ? JSON.parse(JSON.parse(pushed[0].slice(pushed[0].indexOf("JSON.parse(") + 11, -2))) : null;
+    ok(msg && msg.length === 1 && msg[0].root === join(sess, "app"), "git status runs for the nested repo only");
+    ok(msg && msg[0].files["a.md"] === "M" && msg[0].files["new.md"] === "U", "modified and untracked files are reported");
+    // A change is picked up by the watcher: debounce 1 s, cooldown 5 s after the first run.
+    writeFileSync(join(sess, "app", "late.md"), "y");
+    await new Promise((r) => setTimeout(r, 7500));
+    const last = pushed.length > 1 ? JSON.parse(JSON.parse(pushed[pushed.length - 1].slice(pushed[pushed.length - 1].indexOf("JSON.parse(") + 11, -2))) : null;
+    ok(last && last[0].files["late.md"] === "U", "a file change re-runs git status (watcher, debounce, cooldown)");
+  } else console.log("  skip git status poll (git not found)");
+  wc.isDestroyed = () => true; // stops the poll timer from touching the fake
+  rmSync(sess, { recursive: true, force: true });
   rmSync(ud, { recursive: true, force: true });
 }
 

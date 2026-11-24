@@ -31,3 +31,32 @@
 @media (prefers-reduced-motion: reduce) {
   [data-fa-tone] > button { animation: none; background-position: 50% 0; }
 }
+
+/*
+ * Git marks for nested repos: the page script sets data-fa-git on a row's name
+ * button (M, A, U, R, ! or dir) where the app drew no mark of its own. The
+ * mark is a pseudo-element, so the app's React tree is left alone. Colours are
+ * the app's own git variables, as in its own marks.
+ */
+button[data-fa-git]::after {
+  content: attr(data-fa-git);
+  flex: none;
+  width: 1rem;
+  margin-inline-start: auto;
+  text-align: center;
+}
+button[data-fa-git=dir]::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-inline: auto 5px;
+  align-self: center;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+button[data-fa-git=M] { color: light-dark(var(--code-theme-light-git-modified, var(--cds-text-tint-yellow)), var(--code-theme-dark-git-modified, var(--cds-text-tint-yellow))); }
+button[data-fa-git=A] { color: light-dark(var(--code-theme-light-git-added, var(--cds-text-tint-green)), var(--code-theme-dark-git-added, var(--cds-text-tint-green))); }
+button[data-fa-git=U] { color: light-dark(var(--code-theme-light-git-untracked, var(--cds-text-tint-green)), var(--code-theme-dark-git-untracked, var(--cds-text-tint-green))); }
+button[data-fa-git=R] { color: light-dark(var(--code-theme-light-git-renamed, var(--cds-text-tint-blue)), var(--code-theme-dark-git-renamed, var(--cds-text-tint-blue))); }
+button[data-fa-git="!"] { color: light-dark(var(--code-theme-light-git-conflict, var(--cds-text-tint-red)), var(--code-theme-dark-git-conflict, var(--cds-text-tint-red))); }

@@ -25,6 +25,10 @@ function store(initial) {
 function row(abs, isDirectory) {
   const attrs = {};
   const el = { attrs, setAttribute: (k, v) => { attrs[k] = String(v); }, removeAttribute: (k) => { delete attrs[k]; } };
+  const btn = { attrs: {}, marked: false, setAttribute: (k, v) => { btn.attrs[k] = String(v); }, removeAttribute: (k) => { delete btn.attrs[k]; },
+    querySelector: () => (btn.marked ? {} : null) };
+  el.btn = btn;
+  el.querySelector = () => btn;
   el["__reactFiber$t"] = { memoizedProps: { entry: { absPath: abs, isDirectory } }, return: null };
   return el;
 }
@@ -45,6 +49,7 @@ const document = {
   querySelectorAll(sel) {
     if (sel === "body *") return [rootEl];
     if (sel.indexOf("treeitem") >= 0) return rows;
+    if (sel.indexOf("data-fa-git") >= 0) return rows.map((r) => r.btn).filter((b) => b && b.attrs["data-fa-git"]);
     return rows.filter((r) => r.attrs["data-fa-tone"] || r.attrs["data-fa-dim"]);
   }
 };
@@ -90,6 +95,23 @@ await wait(150);
 ok(rows[4].attrs["data-fa-tone"] === "orange", "an edit gets the orange tone");
 ok(!rows[0].attrs["data-fa-dim"], "already open folders are not dimmed");
 
+// Git marks for nested repos: wanted() names the folders on screen, setGit()
+// marks rows the app left unmarked and nothing else.
+{
+  const api = window.__cdbFilesActivity;
+  const w = await api.wanted();
+  ok(w && w.cwd === "C:\\claude" && w.dirs.includes("C:\\claude\\repos\\app"), "wanted() reports the session folder and the folders on screen");
+  rows[4].btn.marked = true; // the app drew its own mark here
+  api.setGit([{ root: "C:\\claude\\repos\\app", files: { "a.md": "M", "src/x.js": "A" }, ut: ["new/"] }]);
+  ok(rows[2].btn.attrs["data-fa-git"] === "M", "a changed file in a nested repo gets its letter");
+  ok(rows[1].btn.attrs["data-fa-git"] === "dir", "the repo folder gets the folder dot");
+  ok(!rows[3].btn.attrs["data-fa-git"], "a folder outside the repo is left alone");
+  ok(!rows[4].btn.attrs["data-fa-git"], "a row the app already marked keeps the app's mark");
+  api.setGit([]);
+  ok(!rows[2].btn.attrs["data-fa-git"] && !rows[1].btn.attrs["data-fa-git"], "an empty result clears the marks");
+  api.setGit([{ root: "C:\\claude\\repos\\app", files: { "a.md": "M" }, ut: [] }]);
+}
+
 // A session switch reseeds: tools already in the new session are history.
 files.set({ currentSessionId: "s2" });
 put([tool("s2a", "Read", { file_path: "C:\\claude\\repos\\app\\a.md" })], true);
@@ -102,6 +124,7 @@ put([tool("s2a", "Read", { file_path: "C:\\claude\\repos\\app\\a.md" }), tool("s
 await wait(60);
 ok(calls.length === 2, "with the feature off nothing follows");
 ok(rows.every((r) => !r.attrs["data-fa-tone"] && !r.attrs["data-fa-dim"]), "with the feature off no row is marked");
+ok(rows.every((r) => !r.btn.attrs["data-fa-git"]), "with the feature off no git mark is left");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

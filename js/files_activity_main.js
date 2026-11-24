@@ -13,6 +13,9 @@
  * on every page load, so a change applies to the next page and needs no
  * restart; the .jsonc wins over the .json. It is off by default.
  *
+ * The same module also marks files of nested git repos (see the git status
+ * section): the app's own marks cover only the session folder's repo.
+ *
  * globalThis.__cdbFilesActivityRefresh() (called by the Extra settings handlers
  * after the switch changes) re-runs the page script in every open page,
  * including the teardown run when the switch is off.
@@ -27,6 +30,7 @@
   var _fs = require("fs");
   var _path = require("path");
   var _URL = require("url").URL;
+  var _cp = require("child_process");
   // Both placeholders are replaced by the patch with escaped source strings.
   var PAGE_SRC = "__CDB_FILES_ACTIVITY_PAGE_SRC__";
   var PAGE_CSS = "__CDB_FILES_ACTIVITY_CSS__";
@@ -122,6 +126,166 @@
   var cssGen = new WeakMap(); // webContents -> generation counter to drop stale insertCSS resolves
   var injected = new WeakSet(); // webContents that already carry the page script
 
+  // ---- git status for nested repos --------------------------------------------
+  // Shaped after VS Code's git extension: git status runs when something changed,
+  // not on a timer. Each repo found under the session folder gets an fs.watch;
+  // an event marks it dirty, and a status run happens once it has been quiet for
+  // QUIET_MS, at least COOLDOWN_MS after its last run, only while the window is
+  // focused and the repo's folder row is on screen, at most MAX_RUNNING at once.
+  // A slow fallback marks a repo dirty every FALLBACK_MS to catch missed events.
+  // A repo whose status output is over MAX_OUT is "huge": skipped until the
+  // session folder changes. The page is asked once a second what is on screen
+  // (wanted) and given the results (setGit); nothing is exposed to it, so the
+  // remote page cannot call into main. Paths from the page are re-checked here
+  // (absolute, strictly under the session folder, at most MAX_REPOS repos) and
+  // git runs with core.fsmonitor off so a repo config cannot start a program.
+  var MAX_REPOS = 16;
+  var MAX_RUNNING = 3;
+  var TICK_MS = 1000;
+  var QUIET_MS = 1000;
+  var COOLDOWN_MS = 5000;
+  var FALLBACK_MS = 60000;
+  var MAX_OUT = 1024 * 1024;
+  var polls = new WeakMap(); // webContents -> {timer, busy, cwd, repos, last}
+
+  function inside(root, p) {
+    var r = _path.resolve(root).toLowerCase(), q = _path.resolve(p).toLowerCase();
+    return q !== r && q.indexOf(r + _path.sep) === 0;
+  }
+
+  // -z porcelain v1 -> {files: {rel: M|A|U|R|!}, ut: [untracked dir/]}.
+  // Deleted paths have no row and are skipped; a rename carries the old name as
+  // the next token.
+  function parseStatus(out) {
+    var t = String(out).split("\0"), files = {}, ut = [];
+    for (var i = 0; i < t.length; i++) {
+      var s = t[i];
+      if (s.length < 4) continue;
+      var x = s[0], y = s[1], p = s.slice(3);
+      if (x === "R" || x === "C") i++;
+      if (x === "?" && y === "?") {
+        if (p.slice(-1) === "/") ut.push(p); else files[p] = "U";
+      } else if (x === "U" || y === "U" || (x === "A" && y === "A") || (x === "D" && y === "D")) {
+        files[p] = "!";
+      } else if (x === "D" || y === "D") {
+        continue;
+      } else if (x === "A" || y === "A") {
+        files[p] = "A";
+      } else if (x === "R" || x === "C") {
+        files[p] = "R";
+      } else {
+        files[p] = "M";
+      }
+    }
+    return { files: files, ut: ut };
+  }
+
+  // cb(result) on success, cb(null, huge) on failure.
+  function gitStatus(repo, cb) {
+    try {
+      _cp.execFile("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", repo,
+        "status", "--porcelain=v1", "-z", "--untracked-files=normal"],
+        { timeout: 20000, maxBuffer: MAX_OUT, windowsHide: true,
+          env: Object.assign({}, process.env, { GIT_OPTIONAL_LOCKS: "0" }) },
+        function (err, out) {
+          if (!err) { cb(parseStatus(out)); return; }
+          cb(null, err.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER");
+        });
+    } catch (e) { cb(null, false); }
+  }
+
+  // Only changes that can alter git status: everything outside .git, plus
+  // .git/index and .git/HEAD. node_modules churn is ignored.
+  function relevant(name) {
+    if (!name) return true;
+    var f = String(name).split(String.fromCharCode(92)).join("/");
+    if (f === ".git" || f.indexOf(".git/") === 0) return f === ".git/index" || f === ".git/HEAD";
+    return f.indexOf("node_modules/") !== 0 && f.indexOf("/node_modules/") < 0;
+  }
+
+  function watchRepo(r, root) {
+    try {
+      r.watcher = _fs.watch(root, { recursive: true, persistent: false }, function (_ev, name) {
+        if (!relevant(name)) return;
+        r.dirty = true;
+        r.event = Date.now();
+      });
+      r.watcher.on("error", function () { try { r.watcher.close(); } catch (e) {} r.watcher = null; });
+    } catch (e) { r.watcher = null; }
+  }
+  function closeRepos(st) {
+    for (var k in st.repos) { try { if (st.repos[k].watcher) st.repos[k].watcher.close(); } catch (e) {} }
+    st.repos = {};
+  }
+
+  function pushResults(wc, st) {
+    var out = [];
+    for (var k in st.repos) if (st.repos[k].res) out.push({ root: k, files: st.repos[k].res.files, ut: st.repos[k].res.ut });
+    var json = JSON.stringify(out);
+    if (json === st.last || wc.isDestroyed()) return;
+    st.last = json;
+    var q = wc.executeJavaScript("window.__cdbFilesActivity&&window.__cdbFilesActivity.setGit&&window.__cdbFilesActivity.setGit(JSON.parse(" + JSON.stringify(json) + "))");
+    if (q && q.catch) q.catch(function () {});
+  }
+
+  function tick(wc, st) {
+    if (st.busy || wc.isDestroyed()) return;
+    st.busy = true;
+    var done = function () { st.busy = false; };
+    var q = wc.executeJavaScript(
+      "(window.__cdbFilesActivity&&window.__cdbFilesActivity.wanted&&window.__cdbFilesActivity.wanted())||null");
+    if (!q || !q.then) { done(); return; }
+    q.then(function (w) {
+      done();
+      if (!w || typeof w.cwd !== "string" || !_path.isAbsolute(w.cwd) || !Array.isArray(w.dirs)) return;
+      if (st.cwd !== w.cwd) { closeRepos(st); st.cwd = w.cwd; st.last = ""; }
+      var n = Object.keys(st.repos).length, now = Date.now(), seen = {}, i;
+      for (i = 0; i < w.dirs.length && i < 5000; i++) {
+        var d = w.dirs[i];
+        if (typeof d !== "string" || !_path.isAbsolute(d) || !inside(st.cwd, d)) continue;
+        seen[d] = true;
+        if (st.repos[d] || n >= MAX_REPOS) continue;
+        try {
+          if (_fs.existsSync(_path.join(d, ".git"))) {
+            st.repos[d] = { dirty: true, event: 0, end: 0, running: false, huge: false, res: null, watcher: null };
+            watchRepo(st.repos[d], d);
+            n++;
+          }
+        } catch (e) {}
+      }
+      if (w.focused === false) return;
+      var running = 0, k;
+      for (k in st.repos) if (st.repos[k].running) running++;
+      Object.keys(st.repos).forEach(function (root) {
+        var r = st.repos[root];
+        if (!seen[root] || r.running || r.huge || running >= MAX_RUNNING) return;
+        if (now - r.end >= FALLBACK_MS) r.dirty = true;
+        if (!r.dirty || now - r.event < QUIET_MS || now - r.end < COOLDOWN_MS) return;
+        r.running = true;
+        r.dirty = false;
+        running++;
+        gitStatus(root, function (res, huge) {
+          r.running = false;
+          r.end = Date.now();
+          if (huge) { r.huge = true; try { if (r.watcher) r.watcher.close(); } catch (e) {} r.watcher = null; }
+          r.res = res || null; // null: huge, not a repo any more, or git failed
+          pushResults(wc, st);
+        });
+      });
+    }, done);
+  }
+
+  function stopPoll(wc) {
+    var st = polls.get(wc);
+    if (st) { clearInterval(st.timer); closeRepos(st); polls.delete(wc); }
+  }
+  function startPoll(wc) {
+    stopPoll(wc);
+    var st = { timer: null, busy: false, cwd: "", repos: {}, last: "" };
+    st.timer = setInterval(function () { tick(wc, st); }, TICK_MS);
+    polls.set(wc, st);
+  }
+
   function runPage(wc, on) {
     var src = "var __CDB_FILES_ACTIVITY_OPTS=" + JSON.stringify({ enabled: on }) + ";\n" + PAGE_SRC;
     var p = wc.executeJavaScript(src);
@@ -143,11 +307,13 @@
       if (!injectHost(wc.getURL() || "")) {
         if (cssGen.has(wc)) dropCss(wc);
         injected.delete(wc);
+        stopPoll(wc);
         return;
       }
       var on = enabled();
       dropCss(wc);
       if (!on) {
+        stopPoll(wc);
         // Only a page that already carries the script needs the teardown run.
         if (injected.has(wc)) { injected.delete(wc); runPage(wc, false); }
         return;
@@ -166,11 +332,13 @@
         }, function () {});
       }
       runPage(wc, true);
+      startPoll(wc);
     } catch (e) {}
   }
 
   _electron.app.on("web-contents-created", function (_ev, wc) {
     wc.on("dom-ready", function () { inject(wc); });
+    wc.once("destroyed", function () { stopPoll(wc); });
   });
 
   globalThis.__cdbFilesActivityRefresh = function () {

@@ -19,7 +19,7 @@
  * feature stays idle; nothing throws into the page.
  *
  * The page script only touches data-* attributes on rows and calls the app's
- * own followInFilesTree. The look (shimmer) lives in js/files_activity.css.
+ * own followInFilesTree. Git marks for nested repos: see the section below. The look (shimmer) lives in js/files_activity.css.
  */
 (function () {
   "use strict";
@@ -33,6 +33,7 @@
   var FLASH_MS = 2700;
   var PASS_MS = 100;
   var FIND_MS = 3000;
+  var GIT_MS = 500;
   var MAX_FIBERS = 300000;
   var MAX_HOPS = 60;
 
@@ -255,6 +256,86 @@
     }
   }
 
+  // ---- git marks in nested repos ---------------------------------------------
+  // The app marks files only for the session folder's own repo. The main half
+  // polls wanted() for the folders on screen, runs git status in every nested
+  // repo it finds there and hands the result to setGit(). Rows the app left
+  // unmarked get data-fa-git on their name button (the look is CSS only).
+  var git = { repos: [], timer: null };
+  function wanted() {
+    if (!on || !stores.files) return null;
+    var sid = stateOf(stores.files).currentSessionId, rows = document.querySelectorAll(ROW_SEL);
+    if (!sid || !rows.length) return null;
+    return sessionCwd(sid).then(function (cwd) {
+      if (!cwd) return null;
+      var dirs = [];
+      for (var i = 0; i < rows.length; i++) {
+        var e = entryOf(rows[i]);
+        if (e && e.isDirectory) dirs.push(e.absPath);
+      }
+      return { cwd: cwd, dirs: dirs, focused: typeof document.hasFocus === "function" ? document.hasFocus() : true };
+    });
+  }
+  function setGit(list) {
+    var out = [];
+    for (var i = 0; i < (list || []).length; i++) {
+      var r = list[i], root = norm(r.root), files = {}, dirs = {}, k, p;
+      if (!root) continue;
+      dirs[root] = true;
+      for (k in r.files || {}) {
+        files[root + "/" + k.toLowerCase()] = r.files[k];
+        for (p = k.toLowerCase(); p.lastIndexOf("/") > 0;) { p = p.slice(0, p.lastIndexOf("/")); dirs[root + "/" + p] = true; }
+      }
+      var ut = [];
+      for (k = 0; k < (r.ut || []).length; k++) {
+        var u = root + "/" + String(r.ut[k]).replace(/\/+$/, "").toLowerCase();
+        ut.push(u);
+        for (p = u; p.length > root.length + 1 && p.lastIndexOf("/") > root.length; ) { p = p.slice(0, p.lastIndexOf("/")); dirs[p] = true; }
+      }
+      out.push({ root: root, files: files, dirs: dirs, ut: ut });
+    }
+    git.repos = out;
+    applyGit();
+  }
+  function markOf(path, isDir) {
+    var best = null, i;
+    for (i = 0; i < git.repos.length; i++) {
+      var r = git.repos[i];
+      if (under(r.root, path) && (!best || r.root.length > best.root.length)) best = r;
+    }
+    if (!best) return null;
+    if (isDir) {
+      if (best.dirs[path]) return "dir";
+      for (i = 0; i < best.ut.length; i++) if (under(best.ut[i], path)) return "dir";
+      return null;
+    }
+    if (best.files[path]) return best.files[path];
+    for (i = 0; i < best.ut.length; i++) if (under(best.ut[i], path)) return "U";
+    return null;
+  }
+  function nameButton(row) {
+    return row.querySelector ? row.querySelector(":scope > button") : null;
+  }
+  function clearGit() {
+    var bs = document.querySelectorAll("[data-fa-git]");
+    for (var i = 0; i < bs.length; i++) bs[i].removeAttribute("data-fa-git");
+  }
+  function applyGit() {
+    if (!on) return;
+    var rows = document.querySelectorAll(ROW_SEL);
+    for (var i = 0; i < rows.length; i++) {
+      var b = nameButton(rows[i]);
+      if (!b) continue;
+      var m = null;
+      // A row the app already marked (its own repo) keeps the app's mark.
+      if (git.repos.length && !(b.querySelector && b.querySelector('span[aria-hidden="true"].ms-auto'))) {
+        var e = entryOf(rows[i]);
+        if (e) m = markOf(norm(e.absPath), e.isDirectory === true);
+      }
+      if (m) b.setAttribute("data-fa-git", m); else b.removeAttribute("data-fa-git");
+    }
+  }
+
   // ---- lifecycle ------------------------------------------------------------
   function unsubscribe() {
     while (unsubs.length) { try { unsubs.pop()(); } catch (e) {} }
@@ -279,6 +360,7 @@
     if (findTimer) return;
     tick();
     findTimer = setInterval(tick, FIND_MS);
+    if (!git.timer) git.timer = setInterval(applyGit, GIT_MS);
   }
   function stop() {
     if (findTimer) { clearInterval(findTimer); findTimer = null; }
@@ -286,11 +368,16 @@
     if (flash.timer) { clearInterval(flash.timer); flash.timer = null; }
     flash.until = 0;
     clearRows();
+    if (git.timer) { clearInterval(git.timer); git.timer = null; }
+    git.repos = [];
+    clearGit();
   }
 
   window[KEY] = {
     setEnabled: function (v) { on = v === true; if (on) start(); else stop(); },
-    version: 1
+    wanted: wanted,
+    setGit: setGit,
+    version: 2
   };
   if (on) start();
 })();
