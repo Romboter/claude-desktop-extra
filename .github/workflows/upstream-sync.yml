@@ -1,20 +1,31 @@
 name: "Windows: Sync Upstream & Release"
 
-# Every 2 hours: keep this fork on upstream (patrickjaja/claude-desktop-extra)
-# and publish a new Windows build when anything moved. A run with nothing new
-# is cheap: merge, read RELEASES, decide, stop.
+# Every 2 hours: bring upstream (patrickjaja/claude-desktop-extra) to this fork
+# as a PULL REQUEST for review, and publish a new Windows build when Anthropic's
+# Windows version moved. A run with nothing new is cheap: fetch, read RELEASES,
+# decide, stop.
 #
-#   1. sync     - git merge of upstream master into master. The fork only ADDS
-#                 files (its edits to upstream files live in
-#                 scripts/windows/overlay/*.patch), so this never
+#   1. sync     - git merge of upstream master into the branch sync/upstream and
+#                 a PR into master. Nothing reaches master until you merge that
+#                 PR: upstream is a third party, and master is what gets built
+#                 and published. Merging is your approval, and it releases. The PR body is made by
+#                 scripts/sync-review-report.sh: the changed code, the added
+#                 lines worth a look, and a prompt to paste into Claude for the
+#                 review. The fork only ADDS files (its edits to upstream files
+#                 live in scripts/windows/overlay/*.patch), so the merge never
 #                 conflicts, except in .github/workflows/: upstream's Linux
 #                 workflows are not used here, and a conflict there is
 #                 resolved by keeping the fork's version.
-#   2. build    - when upstream moved, or Anthropic's Windows version (the
-#                 RELEASES feed) is HIGHER than the highest published
-#                 windows-v release: Build Windows (build x64 + arm64, boot the
-#                 x64 build on a Windows runner) and publish windows-v<version>.
-#                 A failed check publishes nothing.
+#   2. build    - when Anthropic's Windows version (the RELEASES feed) is HIGHER
+#                 than the highest published windows-v release, or by hand with
+#                 force_build: Build Windows (build x64 + arm64, boot the x64
+#                 build on a Windows runner) from master and publish
+#                 windows-v<version>. A failed check publishes nothing.
+#      release  - merging the sync PR (the release-merged job, on the PR's
+#                 closed event) builds and publishes that merge commit. The PR
+#                 already ran the same Build Windows checks before you merged,
+#                 so the result is known in advance. Only a MERGED PR from
+#                 sync/upstream in this repository qualifies.
 #   3. report   - on any failure, an issue with the run link and a prompt to
 #                 fix it with Claude (when Issues are enabled on the repo;
 #                 otherwise the run summary). GitHub also emails the failed run.
@@ -26,11 +37,12 @@ name: "Windows: Sync Upstream & Release"
 #                 it is fixed (a green run closes the issue), or by closing the
 #                 issue. Without Issues enabled there is no pause flag.
 #
-# Syncing commits that change upstream's own .github/workflows/ files needs a
-# token with the `workflow` scope: add a fine-grained personal access token as
-# the SYNC_TOKEN secret (repository: this fork; permissions: Contents and
-# Workflows read/write). Without it the default token syncs everything else
-# and the run reports what it could not do.
+# Needs a fine-grained personal access token as the SYNC_TOKEN secret
+# (repository: this fork; permissions: Contents, Workflows and Pull requests
+# read/write). Two reasons: commits that change upstream's own
+# .github/workflows/ files need the `workflow` scope, and a PR opened with the
+# default token does not start the Build Windows checks on it. Without it the
+# sync cannot push such commits, and its PR runs no checks.
 
 on:
   schedule:
@@ -41,6 +53,10 @@ on:
         description: 'Rebuild and republish the Windows release even if nothing changed or the failure pause is on'
         type: boolean
         default: false
+  # Merging the sync PR is the approval: it builds and publishes what was merged.
+  pull_request:
+    types: [closed]
+    branches: [master]
 
 permissions:
   contents: read
@@ -51,10 +67,13 @@ concurrency:
 
 jobs:
   sync:
+    # Scheduled and by-hand runs only; the pull_request trigger is for release-merged.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
       issues: read
+      pull-requests: write
     outputs:
       merge_type: ${{ steps.sync.outputs.merge_type }}
       windows_latest: ${{ steps.win.outputs.latest }}
@@ -73,17 +92,19 @@ jobs:
 
       - name: Check out master
         if: ${{ steps.failing.outputs.issue == '' || inputs.force_build }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: master
           fetch-depth: 0
           token: ${{ secrets.SYNC_TOKEN || github.token }}
 
-      - name: Sync master with upstream
+      - name: Sync upstream into a pull request
         id: sync
-        # Paused (failure issue open): leave master where it is. A by-hand run
-        # with force_build ticked goes ahead.
+        # Paused (failure issue open): leave everything where it is. A by-hand
+        # run with force_build ticked goes ahead.
         if: ${{ steps.failing.outputs.issue == '' || inputs.force_build }}
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
         run: |
           set -uo pipefail
           git config user.name "github-actions[bot]"
@@ -92,7 +113,21 @@ jobs:
           git fetch -q upstream master
           type=none
           if ! git merge-base --is-ancestor upstream/master HEAD; then
-            type=merge
+            # Upstream has commits master lacks. They go to a PR, never to master.
+            type=pr
+            pr=$(gh pr list -R "$GITHUB_REPOSITORY" --head sync/upstream --base master --state open --json number -q '.[0].number // empty')
+            git fetch -q origin sync/upstream 2>/dev/null || true
+            if [ -n "$pr" ] && git rev-parse -q --verify origin/sync/upstream >/dev/null \
+               && git merge-base --is-ancestor upstream/master origin/sync/upstream \
+               && git merge-base --is-ancestor origin/master origin/sync/upstream; then
+              echo "PR #$pr already carries upstream and the current master; nothing to do." >> "$GITHUB_STEP_SUMMARY"
+              echo "merge_type=pr" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # Take the report script from master now: after the merge the working
+            # tree holds upstream's files, and the script must be ours.
+            git show origin/master:scripts/sync-review-report.sh > "$RUNNER_TEMP/sync-review-report.sh"
+            git switch -q -C sync/upstream
             if ! git merge --no-edit upstream/master; then
               # Upstream's .github/workflows/ files are not used on this fork:
               # resolve every conflict there our way (keep ours, or stay deleted).
@@ -107,9 +142,23 @@ jobs:
               done <<<"$conflicted"
               git commit --no-edit -q
             fi
-            if ! git push origin HEAD:master; then
-              echo "::error::Could not push the merge. If upstream changed .github/workflows/, add a SYNC_TOKEN secret (see the header of this workflow)."
+            # sync/upstream is this workflow's own branch: replace it each time.
+            if ! git push --force origin HEAD:refs/heads/sync/upstream; then
+              echo "::error::Could not push sync/upstream. If upstream changed .github/workflows/, add a SYNC_TOKEN secret (see the header of this workflow)."
               exit 1
+            fi
+            # The review report is built from the code, never from upstream's text.
+            bash "$RUNNER_TEMP/sync-review-report.sh" origin/master HEAD | head -c 60000 > "$RUNNER_TEMP/pr-body.md"
+            if [ -n "$pr" ]; then
+              gh pr edit "$pr" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/pr-body.md"
+              echo "Sync: updated PR #$pr" >> "$GITHUB_STEP_SUMMARY"
+            else
+              if ! gh pr create -R "$GITHUB_REPOSITORY" --base master --head sync/upstream \
+                   --title "Sync upstream ($(date -u +%F))" --body-file "$RUNNER_TEMP/pr-body.md"; then
+                echo "::error::Could not open the PR. Allow Actions to create pull requests (Settings > Actions > General) or set SYNC_TOKEN."
+                exit 1
+              fi
+              echo "Sync: opened a PR" >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
           echo "merge_type=${type}" >> "$GITHUB_OUTPUT"
@@ -160,7 +209,9 @@ jobs:
             echo "build=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "$MERGE_TYPE" != "none" ] || [ "$newer" = "true" ] || [ "$FORCE" = "true" ]; then
+          # An upstream sync (MERGE_TYPE=pr) is a PR awaiting review: it never
+          # triggers a build; merging that PR does (release-merged).
+          if [ "$newer" = "true" ] || [ "$FORCE" = "true" ]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
             echo "Rebuilding and publishing the Windows release." >> "$GITHUB_STEP_SUMMARY"
           else
@@ -178,8 +229,24 @@ jobs:
       publish: true
       ref: master
 
+  # The sync PR was merged: build and publish exactly the merge commit. Only a
+  # merged PR from sync/upstream in THIS repository qualifies; a fork cannot
+  # borrow the branch name, and a closed-but-unmerged PR does nothing.
+  release-merged:
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.merged == true
+      && github.event.pull_request.head.ref == 'sync/upstream'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      publish: true
+      ref: ${{ github.event.pull_request.merge_commit_sha }}
+
   report:
-    needs: [sync, build]
+    needs: [sync, build, release-merged]
     if: failure()
     runs-on: ubuntu-24.04
     permissions:
@@ -230,8 +297,8 @@ jobs:
           fi
 
   resolve:
-    needs: [sync, build]
-    if: success() && needs.build.result == 'success'
+    needs: [sync, build, release-merged]
+    if: success() && (needs.build.result == 'success' || needs.release-merged.result == 'success')
     runs-on: ubuntu-24.04
     permissions:
       issues: write

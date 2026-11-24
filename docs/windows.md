@@ -144,9 +144,9 @@ This fork follows [patrickjaja/claude-desktop-extra](https://github.com/patrickj
   So syncing master with upstream never conflicts. If upstream rewrites one of those lines, `prepare-sources.sh` fails loudly instead, naming the patch.
 - **Automation:** the **Upstream Sync** workflow (`.github/workflows/upstream-sync.yml`) runs every 2 hours (at minute 51):
   1. looks for an open "Automatic update failed" issue (see the pause below);
-  2. syncs master with GitHub's "Sync fork";
+  2. merges upstream into the branch `sync/upstream` and opens or updates a **pull request** into master, with a review report (changed code, added lines worth a look, and a prompt to paste into Claude). Nothing reaches master until you merge it. The PR runs Build Windows (build + boot on Windows) first, and merging it builds and publishes that merge commit;
   3. compares Anthropic's current Windows version (the `RELEASES` feed) with the newest `windows-v` release;
-  4. when upstream moved, or Anthropic's version is **higher** than the newest published one, runs Build Windows with `publish`. An equal or lower Anthropic version never rebuilds, so a rollback on Anthropic's side cannot cause a rebuild on every run.
+  4. when Anthropic's version is **higher** than the newest published one (or by hand with `force_build`), runs Build Windows from master with `publish`. An equal or lower Anthropic version never rebuilds, so a rollback on Anthropic's side cannot cause a rebuild on every run.
 
   A failed check publishes nothing. The failure is reported in an issue (when Issues are enabled on the repo, otherwise in the run summary; GitHub also emails failed scheduled runs), with a ready-to-paste prompt for fixing it with Claude: it covers the fix, the PR into this fork's `master`, and the by-hand rebuild.
 
