@@ -98,14 +98,24 @@ else
     line="$(grep -F " AnthropicClaude-$VERSION-full.nupkg " "$WORK/RELEASES" || true)"
     [ -n "$line" ] || die "version $VERSION is not in RELEASES (it lists the current release only); download it yourself and pass --nupkg FILE --sha1 HEX"
     read -r SHA1 _name SIZE <<< "$line"
-    log "Downloading AnthropicClaude-$VERSION-full.nupkg ($ARCH, $((SIZE / 1048576)) MiB)"
-    curl -fsSL --retry 3 -o "$WORK/claude.nupkg" "$BASE_URL/$ARCH/AnthropicClaude-$VERSION-full.nupkg"
-    got_size="$(stat -c %s "$WORK/claude.nupkg")"
-    [ "$got_size" = "$SIZE" ] || die "size mismatch: got $got_size, RELEASES says $SIZE"
+    # Cached by version+arch; the SHA1 check below still runs on a cache hit.
+    CACHED="${CDE_NUPKG_CACHE:-$HOME/.cache/cde-nupkg}/$ARCH-$VERSION.nupkg"
+    if [ -f "$CACHED" ] && [ "$(stat -c %s "$CACHED")" = "$SIZE" ]; then
+        log "Using cached $CACHED"
+        cp "$CACHED" "$WORK/claude.nupkg"
+    else
+        log "Downloading AnthropicClaude-$VERSION-full.nupkg ($ARCH, $((SIZE / 1048576)) MiB)"
+        curl -fsSL --retry 3 -o "$WORK/claude.nupkg" "$BASE_URL/$ARCH/AnthropicClaude-$VERSION-full.nupkg"
+        got_size="$(stat -c %s "$WORK/claude.nupkg")"
+        [ "$got_size" = "$SIZE" ] || die "size mismatch: got $got_size, RELEASES says $SIZE"
+        # Cache only after the SHA1 check below passes.
+        CACHE_AFTER_VERIFY=1
+    fi
 fi
 got_sha1="$(sha1sum "$WORK/claude.nupkg" | cut -d' ' -f1)"
 [ "${got_sha1,,}" = "${SHA1,,}" ] || die "SHA1 mismatch: got $got_sha1, expected $SHA1"
 log "Verified SHA1 $got_sha1 (version $VERSION)"
+if [ "${CACHE_AFTER_VERIFY:-}" = 1 ]; then mkdir -p "$(dirname "$CACHED")" && cp "$WORK/claude.nupkg" "$CACHED"; fi
 
 # ---------------------------------------------------------------------------
 # 2. Unpack the app and its asar
