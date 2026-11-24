@@ -52,7 +52,7 @@ button[data-fa-git=dir]::after {
   margin-inline: auto 5px;
   align-self: center;
   border-radius: 50%;
-  background: currentColor;
+  background: light-dark(var(--code-theme-light-git-modified, var(--cds-text-tint-yellow)), var(--code-theme-dark-git-modified, var(--cds-text-tint-yellow)));
   opacity: 0.5;
 }
 button[data-fa-git=M] { color: light-dark(var(--code-theme-light-git-modified, var(--cds-text-tint-yellow)), var(--code-theme-dark-git-modified, var(--cds-text-tint-yellow))); }
