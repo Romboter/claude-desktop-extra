@@ -52,7 +52,7 @@ button[data-fa-git]::after {
   margin-inline-start: auto;
   text-align: center;
 }
-button[data-fa-git] { color: var(--fa-git); }
+button[data-fa-git], button[data-fa-git] span:not([aria-hidden=true]) { color: var(--fa-git); }
 button[data-fa-git^=dir]::after {
   content: "";
   width: 6px;
