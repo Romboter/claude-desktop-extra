@@ -52,7 +52,7 @@ button[data-fa-git]::after {
   margin-inline-start: auto;
   text-align: center;
 }
-button[data-fa-git]:not([data-fa-git^=dir]) { color: var(--fa-git); }
+button[data-fa-git] { color: var(--fa-git); }
 button[data-fa-git^=dir]::after {
   content: "";
   width: 6px;
@@ -61,5 +61,5 @@ button[data-fa-git^=dir]::after {
   align-self: center;
   border-radius: 50%;
   background: var(--fa-git);
-  opacity: 0.5;
+  opacity: 0.85;
 }
