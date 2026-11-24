@@ -1,0 +1,96 @@
+name: "Code flags"
+
+# On every PR into master: look at the lines the PR ADDS to the code that ships
+# (patches/, js/, scripts/, packaging/, workflows) and flag the few things a
+# review should always see: new external hosts, command execution, obfuscation,
+# and changed workflow files. The result goes to the job summary and, when
+# there is something to flag, to one PR comment that is updated in place (and
+# removed when a later push clears the flags).
+#
+# It never fails the PR: a flag asks for a look, it does not decide. Do not make
+# it a required check.
+#
+# Safe on untrusted PRs: it uses the plain pull_request trigger (no secrets for
+# fork PRs, read-only token there), checks the PR out but never runs anything
+# from it. It only runs git against two commits, using the report script from
+# the BASE branch, so a PR cannot change the scanner that scans it.
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: code-flags-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  flags:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan the lines this PR adds
+        id: scan
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          # The scanner comes from the base branch, never from the PR.
+          git show "$BASE:scripts/sync-review-report.sh" > "$RUNNER_TEMP/report.sh" || {
+            echo "::warning::scripts/sync-review-report.sh is not on the base branch yet; nothing to scan with."
+            : > "$RUNNER_TEMP/flags.md"
+            echo "flagged=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          # A base script from before MODE=flags would print the whole sync report.
+          if ! grep -q 'MODE:-report' "$RUNNER_TEMP/report.sh"; then
+            echo "::notice::The base branch's scanner has no flags mode yet (this PR adds it); skipping."
+            : > "$RUNNER_TEMP/flags.md"
+            echo "flagged=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Compare against the point the PR branched from, so unrelated changes
+          # that landed on master since do not show up as this PR's.
+          mb="$(git merge-base "$BASE" "$HEAD")"
+          MODE=flags bash "$RUNNER_TEMP/report.sh" "$mb" "$HEAD" | head -c 60000 > "$RUNNER_TEMP/flags.md"
+          if [ -s "$RUNNER_TEMP/flags.md" ]; then
+            echo "flagged=true" >> "$GITHUB_OUTPUT"
+            cat "$RUNNER_TEMP/flags.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "flagged=false" >> "$GITHUB_OUTPUT"
+            echo "No flags: no new external hosts, command execution, obfuscation or workflow changes in the added lines." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The sync PR already carries the full report in its body, so it gets no
+      # second comment. Fork PRs have a read-only token: the comment is skipped,
+      # the summary above still shows it.
+      - name: Comment on the PR
+        if: github.head_ref != 'sync/upstream' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          FLAGGED: ${{ steps.scan.outputs.flagged }}
+        run: |
+          set -uo pipefail
+          marker='<!-- code-flags -->'
+          id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n 1)"
+          if [ "$FLAGGED" = true ]; then
+            { echo "$marker"; cat "$RUNNER_TEMP/flags.md"; } > "$RUNNER_TEMP/comment.md"
+            if [ -n "$id" ]; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" >/dev/null
+            else
+              gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+            fi
+          elif [ -n "$id" ]; then
+            # A later push cleared the flags: remove the stale comment.
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$id" >/dev/null
+          fi

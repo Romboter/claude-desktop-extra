@@ -2,6 +2,8 @@
 # Review report for an upstream-sync PR: what changed in the code that ships, what
 # in it needs a human look, and a prompt to paste into Claude to do that review.
 # Usage: sync-review-report.sh <base-ref> <head-ref>   (markdown on stdout)
+#        MODE=flags sync-review-report.sh ...  only new hosts, exec, obfuscation and
+#        workflow changes; prints nothing when there are none (code-flags.yml).
 # Fork-only file. Read-only: it only runs git against the two refs.
 set -uo pipefail
 
@@ -30,6 +32,46 @@ scan() {
   echo '```'
   echo
 }
+
+# Hosts that are new: present in the added lines, absent from the base tree's code.
+new_hosts() {
+  local h
+  for h in $(printf '%s\n' "$added" | grep '^+' | grep -v '^+++' | grep -oE 'https?://[A-Za-z0-9._-]+' | sort -u); do
+    git grep -qF "$h" "$BASE" -- "${PATHS[@]}" 2>/dev/null || printf '%s\n' "$h"
+  done
+}
+
+EXEC_RE='child_process|execSync|execFile|spawn[(]|eval[(]|new Function|shell: *true|Invoke-Expression|powershell|cmd[.]exe|curl |wget '
+
+# MODE=flags (used on every PR): only the few signals worth interrupting a review
+# for, and nothing at all when there are none. The default mode is the full report.
+if [ "${MODE:-report}" = flags ]; then
+  flagged="$(
+    if printf '%s\n' "$changed" | grep -q '\.github/workflows/'; then
+      echo "> **Workflow files changed.** These run with release and signing access. Read every line."
+      echo
+    fi
+    nh="$(new_hosts)"
+    if [ -n "$nh" ]; then
+      echo "### NEW external hosts"
+      echo "_A host that appears nowhere in the current code. Data could be sent there, or code fetched from there._"
+      echo '```'
+      printf '%s\n' "$nh"
+      echo '```'
+      echo
+    fi
+    scan "New command execution" "Runs programs or shell. Check arguments are argv arrays with no shell, and no network-supplied input." "$EXEC_RE"
+    scan "New obfuscation" "Decoding or building code from encoded data. Legitimate use is rare in this repo." 'atob[(]|fromCharCode'
+  )"
+  if [ -n "$flagged" ]; then
+    echo "## Code flags"
+    echo
+    echo "Added lines in shipping code (\`${PATHS[*]}\`) that this repo's reviews always check. A flag is a prompt to look, not a verdict."
+    echo
+    printf '%s\n' "$flagged"
+  fi
+  exit 0
+fi
 
 echo "# Upstream sync: review before merging"
 echo
@@ -63,22 +105,18 @@ echo
 echo "## Added lines that need a look"
 echo
 
-# Hosts that are new: present in the added lines, absent from the base tree's code.
-newhosts=""
-for h in $(printf '%s\n' "$added" | grep '^+' | grep -v '^+++' | grep -oE 'https?://[A-Za-z0-9._-]+' | sort -u); do
-  git grep -qF "$h" "$BASE" -- "${PATHS[@]}" 2>/dev/null || newhosts="$newhosts$h"$'\n'
-done
+newhosts="$(new_hosts)"
 if [ -n "$newhosts" ]; then
   echo "### NEW external hosts"
   echo "_A host that appears nowhere in the current code. Data could be sent there, or code fetched from there._"
   echo '```'
-  printf '%s' "$newhosts"
+  printf '%s\n' "$newhosts"
   echo '```'
   echo
 fi
 
 scan "Command execution" "Runs programs or shell. Check arguments are argv arrays with no shell, and no network-supplied input." \
-  'child_process|execSync|execFile|spawn[(]|eval[(]|new Function|shell: *true|Invoke-Expression|powershell|cmd[.]exe|curl |wget '
+  "$EXEC_RE"
 scan "Network and links" "Outbound requests and opened URLs. Check the destination is fixed and no user data is in it." \
   'net[.]fetch|fetch[(]|XMLHttpRequest|WebSocket|openExternal|api[.]github[.]com|releases'
 scan "Secrets and credentials" "Anything touching keys, tokens, cookies or the keyring. Check nothing leaves the machine or reaches the page." \
