@@ -170,7 +170,7 @@ index 8a47701..f890116 100644
          __cdbEx_handlers[ch] = function () { return { ok: false, error: "the Auto-fix ready-to-merge wake is Linux only" }; };
        } else if (ch.indexOf("cdb-session-start:") === 0) {
 diff --git a/js/extra_settings_page.js b/js/extra_settings_page.js
-index a81fa02..dab9a82 100644
+index a81fa02..0223d85 100644
 --- a/js/extra_settings_page.js
 +++ b/js/extra_settings_page.js
 @@ -588,12 +588,12 @@
@@ -313,7 +313,41 @@ index a81fa02..dab9a82 100644
    function renderGithubAlertsRow(panel) {
      return renderToggleRow(panel, {
        section: "Chat appearance",
-@@ -4254,6 +4350,7 @@
+@@ -4109,7 +4205,8 @@
+       var active = result.active || null;
+ 
+       function card(entry) {
+-        var node = el("button", "cdbx-card" + (entry.name === active ? " cdbx-on" : ""));
++        var isActive = (entry.name || null) === active;
++        var node = el("button", "cdbx-card" + (isActive ? " cdbx-on" : ""));
+         node.type = "button";
+ 
+         var dots = el("div", "cdbx-dots");
+@@ -4129,7 +4226,7 @@
+         node.appendChild(dots);
+         node.appendChild(el("div", "cdbx-cardname", entry.displayName));
+         node.appendChild(el("div", "cdbx-badge",
+-          entry.source + (entry.name === active ? (overlayName ? " - active + overlay" : " - active") : "")));
++          entry.source + (isActive ? (overlayName ? " - active + overlay" : " - active") : "")));
+ 
+         node.addEventListener("click", function () {
+           api.themesApply(entry.name).then(function (res) {
+@@ -4178,6 +4275,14 @@
+           shown++;
+         });
+ 
++        // Claude default: apply("") unapplies the active theme (the gallery has the same card).
++        if (!needle || "claude default stock".indexOf(needle) >= 0) {
++          var dgrid = el("div", "cdbx-grid");
++          dgrid.appendChild(card({ name: "", displayName: "Claude default", source: "stock" }));
++          host.appendChild(dgrid);
++          shown++;
++        }
++
+         THEME_SECTIONS.forEach(function (section) {
+           var list = buckets[section.key];
+           if (!list || !list.length) return;
+@@ -4254,6 +4359,7 @@
        renderTranscriptLimitsRow,
        renderSessionStartAlwaysAllowRow,
        renderJiraTrackerRow,
@@ -321,7 +355,7 @@ index a81fa02..dab9a82 100644
        { title: "Pull requests", sub: "Auto-fix and auto-archive for your GitHub PRs", items: [
          renderAutoFixAuthorRow,
          renderAutoFixMergeReadyRow,
-@@ -4271,6 +4368,8 @@
+@@ -4271,6 +4377,8 @@
        renderFrostedReplyFieldRow,
        renderGithubAlertsRow,
        renderGithubAlertIconsRow,
@@ -330,7 +364,7 @@ index a81fa02..dab9a82 100644
        renderDevToolsRow
      ] },
      { title: "Models and 3P", sub: "Extra models and gateway options", items: [
-@@ -4281,6 +4380,28 @@
+@@ -4281,6 +4389,28 @@
        renderCuEscapeAbortRow
      ] }
    ];
@@ -359,7 +393,7 @@ index a81fa02..dab9a82 100644
  
    function renderFeatures(panel, target) {
      clear(panel);
-@@ -4730,7 +4851,7 @@
+@@ -4730,7 +4860,7 @@
  
  
        var files = el("div", "cdbx-note cdbx-models-files",
@@ -368,7 +402,7 @@ index a81fa02..dab9a82 100644
          "Routing changes (a key, a model, a provider) reach open sessions at once through " + (st.paths && st.paths.routes) +
          ". New models show in the picker after the Code tab reloads. Sub-agent types, the default sub-agent " +
          "model, the small/fast model and the system-prompt line are handed to each session as it opens. A " +
-@@ -5048,7 +5169,7 @@
+@@ -5048,7 +5178,7 @@
        var url = field(form, "Base URL", input("text", existing ? existing.baseUrl : "", "https://api.example.com/anthropic"),
          "The Anthropic-compatible endpoint; /v1/messages is appended.");
        var key = field(form, "API key", input("password", "", existing && existing.keyOk ? "stored - type to replace" : "API key"),
@@ -377,7 +411,7 @@ index a81fa02..dab9a82 100644
        var modelsUrl = field(form, "Models list URL", input("text", existing ? existing.modelsUrl || "" : "", "optional - found automatically"),
          "Where the provider lists its models (GET, OpenAI or Anthropic shape), on the base URL's host - the key " +
          "goes nowhere else. Left empty, fetch models tries the preset's address, then <base URL>/v1/models, " +
-@@ -5554,9 +5675,8 @@
+@@ -5554,9 +5684,8 @@
      var notice = el("div", "cdbx-notice");
      notice.appendChild(el("div", "cdbx-notice-title", "Changes here require a restart of Claude Desktop"));
      notice.appendChild(el("div", "cdbx-notice-body",
@@ -389,7 +423,7 @@ index a81fa02..dab9a82 100644
      var restart = restartButton();
      notice.appendChild(restart);
      panel.appendChild(notice);
-@@ -7299,7 +7419,23 @@
+@@ -7299,7 +7428,23 @@
      return baseTier + 1.5;
    }
  
@@ -413,7 +447,7 @@ index a81fa02..dab9a82 100644
      var q = (rawQuery || "").trim().toLowerCase();
      if (!q) return [];
      var tokens = q.split(/\s+/).filter(Boolean);
-@@ -7341,6 +7477,8 @@
+@@ -7341,6 +7486,8 @@
      for (var j = 0; j < EXTRA_SEARCH_STATIC.length; j++) {
        var item = EXTRA_SEARCH_STATIC[j];
        if (!kinds[item.kind]) continue;
@@ -422,7 +456,7 @@ index a81fa02..dab9a82 100644
        pool.push({
          kind: item.kind,
          title: item.title,
-@@ -7350,6 +7488,11 @@
+@@ -7350,6 +7497,11 @@
          target: item.section ? { section: item.section } : item.rowTitle ? { rowTitle: item.rowTitle } : null
        });
      }
