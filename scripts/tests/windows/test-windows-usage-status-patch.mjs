@@ -55,7 +55,7 @@ ok(syntax.status === 0, "patched file passes node --check" + (syntax.status ? ":
   const electron = { app: { getPath: () => ud, on: (e, f) => { handlers[e] = f; }, whenReady: () => Promise.resolve() },
     webContents: { getAllWebContents: () => created } };
   const sandbox = { require: (m) => (m === "electron" ? electron : Module.createRequire(import.meta.url)(m)),
-    process: { platform: "win32", env: {}, pid: 1 }, console: { log() {} }, setTimeout, clearTimeout };
+    process: { platform: "win32", env: {}, pid: 1 }, console: { log() {} }, setTimeout, clearTimeout, setInterval, clearInterval };
   sandbox.globalThis = sandbox;
   vm.runInContext(once, vm.createContext(sandbox));
   handlers["web-contents-created"]({}, wc);

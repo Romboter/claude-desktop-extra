@@ -12,6 +12,15 @@
  * on every page load, so a change applies to the next page and needs no
  * restart; the .jsonc wins over the .json. It is off by default.
  *
+ * Cache warm row: the sidebar shows, for the open Code session, the cache
+ * warmer's state (js/cache_warm.js, patches/windows/add_cache_warm.nim) and a
+ * per-session switch. The sessions switched off are kept in
+ * cache-warm-off.json in userData and read by the warmer through
+ * globalThis.__cdbCwIsOff; the page reports a click as a console message
+ * "__cdb-cw:<sessionId>:<0|1>" (0 = off). State goes to the pages through
+ * window.__cdbCwPush, when the warmer calls globalThis.__cdbCwChanged and
+ * every 10 s (the switch in Settings has no event).
+ *
  * globalThis.__cdbUsageStatusRefresh() (called by the Extra settings handlers
  * after the switch changes) re-runs the page script in every open page,
  * including the teardown run when the switch is off.
@@ -113,12 +122,61 @@
       host === "claude.com" || host.endsWith(".claude.com");
   }
 
+  // Cache warm ---------------------------------------------------------------
+  var cwFile = null;
+  var cwOff = null; // Set of session ids switched off
+  function cwLoad() {
+    if (cwOff) return;
+    cwOff = new Set();
+    try {
+      cwFile = _path.join(_electron.app.getPath("userData"), "cache-warm-off.json");
+      var list = JSON.parse(_fs.readFileSync(cwFile, "utf8"));
+      if (Array.isArray(list)) list.forEach(function (id) { if (typeof id === "string") cwOff.add(id); });
+    } catch (e) {}
+  }
+  function cwSave() {
+    try { if (cwFile) _fs.writeFileSync(cwFile, JSON.stringify(Array.from(cwOff))); } catch (e) {}
+  }
+  function cwSnapshot() {
+    var master = false, sessions = {};
+    try { master = !!(globalThis.__cdbCacheWarmConfig && globalThis.__cdbCacheWarmConfig().enabled); } catch (e) {}
+    try { if (globalThis.__cdbCacheWarm) sessions = globalThis.__cdbCacheWarm.snapshot(); } catch (e) {}
+    return { master: master, off: Array.from(cwOff || []), sessions: sessions };
+  }
+  var cwLast = "";
+  function cwPush(force) {
+    var json = JSON.stringify(cwSnapshot());
+    if (!force && json === cwLast) return;
+    cwLast = json;
+    try {
+      _electron.webContents.getAllWebContents().forEach(function (wc) {
+        if (!injected.has(wc) || wc.isDestroyed()) return;
+        var p = wc.executeJavaScript("window.__cdbCwPush&&window.__cdbCwPush(" + json + ")");
+        if (p && p.catch) p.catch(function () {});
+      });
+    } catch (e) {}
+  }
+  cwLoad();
+  globalThis.__cdbCwIsOff = function (id) { return cwOff.has(id); };
+  globalThis.__cdbCwChanged = function () { cwPush(false); };
+  setInterval(function () { cwPush(false); }, 10000).unref();
+  function cwConsole(a, b, c) {
+    var msg = typeof (a && a.message) === "string" ? a.message : c;
+    var m = /^__cdb-cw:([\w-]{1,100}):([01])$/.exec(String(msg));
+    if (!m) return;
+    if (m[2] === "1") cwOff.delete(m[1]); else cwOff.add(m[1]);
+    cwSave();
+    try { if (globalThis.__cdbCacheWarm) globalThis.__cdbCacheWarm.setOff(m[1], m[2] === "0"); } catch (e) {}
+    log("cache-warm " + m[1] + (m[2] === "1" ? " on" : " off"));
+    cwPush(true);
+  }
+
   var cssKeys = new WeakMap(); // webContents -> the insertCSS key of the live document
   var cssGen = new WeakMap(); // webContents -> generation counter to drop stale insertCSS resolves
   var injected = new WeakSet(); // webContents that already carry the page script
 
   function runPage(wc, on) {
-    var src = "var __CDB_USAGE_STATUS_OPTS=" + JSON.stringify({ enabled: on }) + ";\n" + PAGE_SRC;
+    var src = "var __CDB_USAGE_STATUS_OPTS=" + JSON.stringify({ enabled: on, cw: cwSnapshot() }) + ";\n" + PAGE_SRC;
     var p = wc.executeJavaScript(src);
     if (p && p.catch) p.catch(function () {});
     if (on) injected.add(wc);
@@ -166,6 +224,7 @@
 
   _electron.app.on("web-contents-created", function (_ev, wc) {
     wc.on("dom-ready", function () { inject(wc); });
+    wc.on("console-message", cwConsole);
   });
 
   globalThis.__cdbUsageStatusRefresh = function () {

@@ -29,6 +29,7 @@ proc installFor(manager: string): string =
     ")({now:Date.now,setTimer:(f,ms)=>{const t=setTimeout(f,ms);t.unref?.();return t}," &
     "clearTimer:t=>clearTimeout(t),config:()=>globalThis.__cdbCacheWarmConfig?.()??{enabled:false}," &
     "newUuid:()=>require(\"node:crypto\").randomUUID(),log:l=>globalThis.__cdbDiag?.(l)," &
+    "isOff:i=>globalThis.__cdbCwIsOff?.(i)===true,changed:()=>globalThis.__cdbCwChanged?.()," &
     "sendPoke:async(i,u)=>{const v=await " & manager &
     ".getSession(i);if(!v||v.isArchived)return{delivered:false,reason:\"gone\"};" &
     "if(v.isRunning||v.turnRunning)return{delivered:false,reason:\"busy\"};return await " & manager &

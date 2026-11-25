@@ -38,6 +38,13 @@
       onPace: 'On pace',
       badges: { awaiting: 'Waiting', ready: 'Ready', error: 'Error' },
       context: 'Context',
+      cache: 'Cache warm',
+      cacheOffInSettings: 'off in Settings',
+      cacheNone: 'no cache seen',
+      cacheExpired: 'expired',
+      cacheNotWarming: 'not warming',
+      cacheStopped: { 'time-cap': 'stopped: time limit', 'cost-cap': 'stopped: cost limit', cold: 'went cold', gone: 'session gone' },
+      cachePokes: (n) => n + (n === 1 ? ' poke' : ' pokes'),
       used: (percent) => percent + ' used',
       compact: 'Compact session',
       showRail: 'Show session rail',
@@ -55,6 +62,13 @@
       onPace: 'Im Plan',
       badges: { awaiting: 'Wartet', ready: 'Fertig', error: 'Fehler' },
       context: 'Kontext',
+      cache: 'Cache halten',
+      cacheOffInSettings: 'aus in Einstellungen',
+      cacheNone: 'kein Cache bekannt',
+      cacheExpired: 'abgelaufen',
+      cacheNotWarming: 'wird nicht gehalten',
+      cacheStopped: { 'time-cap': 'gestoppt: Zeitlimit', 'cost-cap': 'gestoppt: Kostenlimit', cold: 'kalt geworden', gone: 'Sitzung weg' },
+      cachePokes: (n) => n + ' Anst' + '\u00f6\u00dfe',
       used: (percent) => percent + ' genutzt',
       compact: 'Sitzung komprimieren',
       showRail: 'Sitzungsleiste anzeigen',
@@ -327,7 +341,95 @@
   // otherwise asks Claude's own bridge for the same summary, so the bar also
   // works with the rail hidden. Updated in place, never rebuilt, so it cannot
   // loop.
+  // Cache warm row ------------------------------------------------------------
+
+  // State from the main process (window.__cdbCwPush): { master, off: [ids],
+  // sessions: { id: { expiresAt, ttl, pokes, note, armed } } }.
+  let cw = opts.cw ?? { master: false, off: [], sessions: {} };
+  let cwTimer = null;
+  window.__cdbCwPush = (next) => {
+    cw = next;
+    if (view) syncCacheRow();
+  };
+
+  function clock(ms) {
+    const total = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = String(total % 60).padStart(2, '0');
+    return h > 0 ? h + ':' + String(m).padStart(2, '0') + ':' + sec : m + ':' + sec;
+  }
+
+  // Updated in place like the context row; a one-second tick runs only while
+  // the row shows a live countdown.
+  function syncCacheRow() {
+    if (!rows) return;
+    clearTimeout(cwTimer);
+    const id = openSessionId();
+    let row = rows.querySelector(':scope > .up-cw-row');
+    if (!id) {
+      row?.remove();
+      return;
+    }
+    const text = strings();
+    if (!row) {
+      row = element('div', 'up-row up-cw-row');
+      const top = element('div', 'up-top');
+      const toggle = element('button', 'up-cw-toggle');
+      toggle.type = 'button';
+      toggle.append(element('span', 'up-cw-dot'), element('span', 'up-label'));
+      toggle.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const current = openSessionId();
+        if (!current || !cw.master) return;
+        const off = !cw.off.includes(current);
+        cw = { ...cw, off: off ? [...cw.off, current] : cw.off.filter((x) => x !== current) };
+        console.log('__cdb-cw:' + current + ':' + (off ? '0' : '1'));
+        syncCacheRow();
+      });
+      top.append(toggle, element('span', 'up-meta'));
+      const track = element('div', 'up-track');
+      track.append(element('div', 'up-fill'));
+      row.append(top, track);
+    }
+    if (rows.lastElementChild !== row) rows.append(row);
+    const off = cw.off.includes(id);
+    const info = cw.sessions[id];
+    const left = info?.expiresAt ? info.expiresAt - Date.now() : null;
+    const ttlMs = info?.ttl === '1h' ? 3_600_000 : 300_000;
+    let meta;
+    let live = false;
+    if (!cw.master) meta = text.cacheOffInSettings;
+    else if (left === null) meta = text.cacheNone;
+    else if (left <= 0) meta = (info.note && text.cacheStopped[info.note]) || text.cacheExpired;
+    else {
+      live = true;
+      meta = clock(left);
+      if (off) meta += ' \u00b7 ' + text.cacheNotWarming;
+      else if (info.pokes > 0) meta += ' \u00b7 ' + text.cachePokes(info.pokes);
+    }
+    const toggle = row.querySelector('.up-cw-toggle');
+    const active = cw.master && !off;
+    toggle.classList.toggle('up-cw-on', active);
+    // Guarded: an unchanged write still queues a mutation, and 'disabled' is watched.
+    if (toggle.disabled !== !cw.master) toggle.disabled = !cw.master;
+    if (toggle.getAttribute('aria-pressed') !== String(active)) toggle.setAttribute('aria-pressed', String(active));
+    setText(toggle.querySelector('.up-label'), text.cache);
+    setText(row.querySelector('.up-meta'), meta);
+    const width = live ? Math.min(100, (left / ttlMs) * 100).toFixed(1) + '%' : '0%';
+    const fill = row.querySelector('.up-fill');
+    if (fill.style.width !== width) fill.style.width = width;
+    fill.classList.toggle('up-cw-off', off || !cw.master);
+    if (live && !stopped) cwTimer = setTimeout(syncCacheRow, 1000);
+  }
+
   function syncSidebarContext() {
+    syncContextRow();
+    syncCacheRow();
+  }
+
+  function syncContextRow() {
     if (!rows) return;
     let row = rows.querySelector(':scope > .up-ctx-row');
     const apiPct = ctxApi.id !== null && ctxApi.id === openSessionId() ? ctxApi.pct : null;
@@ -1052,6 +1154,8 @@
     stopped = true;
     clearTimeout(midTurnTimer);
     clearTimeout(retryTimer);
+    clearTimeout(cwTimer);
+    window.__cdbCwPush = null;
     stop.abort();
     observers.forEach((observer) => observer.disconnect());
     clearTimeout(timer);
