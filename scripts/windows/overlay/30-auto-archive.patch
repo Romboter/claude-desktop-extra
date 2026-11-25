@@ -65,10 +65,91 @@ index 1166c31..cda8e22 100644
  
    # What C, D, E and G sit in front of; asserted on the patched result too.
 diff --git a/patches/community/add_feature_auto_archive_grace_ion.nim b/patches/community/add_feature_auto_archive_grace_ion.nim
-index e3679c8..1591ff9 100644
+index e3679c8..43576e8 100644
 --- a/patches/community/add_feature_auto_archive_grace_ion.nim
 +++ b/patches/community/add_feature_auto_archive_grace_ion.nim
-@@ -261,6 +261,7 @@ when isMainModule:
+@@ -65,12 +65,14 @@ type Aliases = object
+   vendor: string
+   exports: array[5, string] # in `placeholders` order
+ 
+-proc resolveAliases(notice, row: string): Aliases =
+-  let subscriber = unique(
+-    notice,
+-    re2"""\[[\w$]+,[\w$]+\]=([\w$]+)\(\),[^;]*;return [^;]*;let [^;]*?ccAutoArchiveOnPrClose===!0\)\};return [^;]*?getPreferences[^;]*?,([\w$]+)\([\w$]+,[\w$]+\),[\w$]+\}""",
+-    "preference subscriber",
+-  )
++# Windows 7.37095.0: the preference subscriber lives in its own chunk (`pref`),
++# no longer in the notice chunk. useState / useEffect are mapped through that
++# chunk's import list (it must import the same vendor-frame file).
++let subscriberRe =
++  re2"""\[[\w$]+,[\w$]+\]=([\w$]+)\(\),[^;]*;return [^;]*;let [^;]*?ccAutoArchiveOnPrClose===!0\)\};return [^;]*?getPreferences[^;]*?,([\w$]+)\([\w$]+,[\w$]+\),[\w$]+\}"""
++
++proc resolveAliases(notice, row, pref: string): Aliases =
++  let subscriber = unique(pref, subscriberRe, "preference subscriber")
+   let jsx = unique(
+     notice,
+     re2"""([\w$]+)\("div",\{role:"status","aria-live":"polite","data-find-omitted":"",className:""",
+@@ -91,13 +93,20 @@ proc resolveAliases(notice, row: string): Aliases =
+   ]
+   let imports = vendorImports(notice)
+   let rowImports = vendorImports(row)
+-  if rowImports.file != imports.file:
++  let prefImports = vendorImports(pref)
++  if rowImports.file != imports.file or prefImports.file != imports.file:
+     raise newException(
+       ValueError, "notice and PR bar row import different vendor-frame files"
+     )
+   result.vendor = imports.file
+   for i, local in locals:
+-    let byLocal = if i < 3: imports.byLocal else: rowImports.byLocal
++    let byLocal =
++      if i < 2:
++        prefImports.byLocal
++      elif i < 3:
++        imports.byLocal
++      else:
++        rowImports.byLocal
+     if local notin byLocal:
+       raise newException(
+         ValueError, placeholders[i] & ": " & local & " is not a vendor-frame import"
+@@ -223,8 +232,8 @@ proc isRow(s: string): bool =
+ when isMainModule:
+   if paramCount() != 1:
+     quit("Usage: add_feature_auto_archive_grace_ion <ion-dist>", 1)
+-  var noticePath, railPath, noticeInput, railInput, rowInput: string
+-  var notices, rails, rows = 0
++  var noticePath, railPath, noticeInput, railInput, rowInput, prefInput: string
++  var notices, rails, rows, prefs = 0
+   for kind, file in walkDir(paramStr(1) / "assets" / "v1"):
+     if kind != pcFile or not file.endsWith(".js"):
+       continue
+@@ -240,9 +249,12 @@ when isMainModule:
+     if input.isRow:
+       inc rows
+       rowInput = input
+-  if notices != 1 or rails != 1 or rows != 1 or noticePath == railPath:
++    if "ccAutoArchiveOnPrClose===!0)}" in input and input.findAll(subscriberRe).len == 1:
++      inc prefs
++      prefInput = input
++  if notices != 1 or rails != 1 or rows != 1 or prefs != 1 or noticePath == railPath:
+     quit(
+-      "[FAIL] archive grace UI: expected one notice, one PR bar row and one distinct session rail chunk",
++      "[FAIL] archive grace UI: expected one notice, one PR bar row, one preference subscriber and one distinct session rail chunk",
+       1,
+     )
+   try:
+@@ -252,7 +264,9 @@ when isMainModule:
+     let railOriginal = restoreRail(railInput)
+     # The row chunk is never written, unless it is the notice chunk itself.
+     let aliases = resolveAliases(
+-      noticeOriginal, if rowInput == noticeInput: noticeOriginal else: rowInput
++      noticeOriginal,
++      if rowInput == noticeInput: noticeOriginal else: rowInput,
++      if prefInput == noticeInput: noticeOriginal else: prefInput,
+     )
+     let noticeOutput = applyNotice(noticeOriginal, aliases)
+     let railOutput = applyRail(railOriginal, aliases)
+@@ -261,6 +275,7 @@ when isMainModule:
        raise newException(ValueError, "injection incomplete or stale")
      writeFile(noticePath, noticeOutput)
      writeFile(railPath, railOutput)

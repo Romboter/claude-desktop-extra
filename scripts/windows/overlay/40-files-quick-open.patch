@@ -93,3 +93,54 @@ index 1433d10..550bce7 100644
    "use strict";
    var raw = String(query == null ? "" : query);
    var on = false;
+diff --git a/patches/community/add_feature_files_quick_open.nim b/patches/community/add_feature_files_quick_open.nim
+index fa148b9..0260e0f 100644
+--- a/patches/community/add_feature_files_quick_open.nim
++++ b/patches/community/add_feature_files_quick_open.nim
+@@ -71,9 +71,11 @@ const EXPECTED_PATCHES = 2 # A: page/main injection, B: worker-host env passthro
+ # passes its own env keeps it and every other worker gets main's live env.
+ # The string quote style flips between minifier releases, so it is matched with
+ # the quote-agnostic ["`] class and re-emitted as captured.
+-# Groups: 0 = the worker bundle path, 1 = the service name, 2 = the quote char.
++# Windows 7.37095.0: the worker host calls a local wrapper `Gun(r,[],{...},n)`
++# that forwards to utilityProcess.fork(e,t,n), so the callee is captured too.
++# Groups: 0 = the callee, 1 = the worker bundle path, 2 = the service name, 3 = the quote char.
+ let forkRe =
+-  re2"""utilityProcess\.fork\(([\w$]+),\[\],\{serviceName:([\w$]+),stdio:(["`])pipe["`](?=[,}])"""
++  re2"""(utilityProcess\.fork|[\w$]+)\(([\w$]+),\[\],\{serviceName:([\w$]+),stdio:(["`])pipe["`](?=[,}])"""
+ # Our injected end-state, asserted positively (Rule 6) rather than inferred from
+ # the absence of the pre-patch shape. Quote-agnostic for the same reason.
+ let forkEndStateRe =
+@@ -136,8 +138,8 @@ proc apply*(input: string): string =
+       forkRe,
+       proc(m: RegexMatch2, s: string): string =
+         inc count
+-        let q = s[m.group(2)]
+-        "utilityProcess.fork(" & s[m.group(0)] & ",[],{serviceName:" & s[m.group(1)] &
++        let q = s[m.group(3)]
++        s[m.group(0)] & "(" & s[m.group(1)] & ",[],{serviceName:" & s[m.group(2)] &
+           ",stdio:" & q & "pipe" & q & ",env:Object.assign({},process.env)",
+     )
+     if count != 1:
+diff --git a/patches/community/add_feature_files_quick_open_worker.nim b/patches/community/add_feature_files_quick_open_worker.nim
+index 16ffce0..898c4b0 100644
+--- a/patches/community/add_feature_files_quick_open_worker.nim
++++ b/patches/community/add_feature_files_quick_open_worker.nim
+@@ -84,12 +84,11 @@ proc apply*(input: string): string =
+       " call=" & $hasCall & ") - refusing to patch on top; re-audit the worker bundle"
+     quit(1)
+ 
+-  let nWrap = wrapperCount(result)
+-  let nTopN = topNCount(result)
+-  if nWrap != 1 or nTopN != 1:
+-    echo "  [FAIL] files quick open worker: the scorer's full-set contract moved (index wrapper " &
+-      $nWrap & "/1, top-N fill " & $nTopN & "/1) - the helper's unbounded scan could " &
+-      "silently return a truncated or empty set; re-audit"
++  # Windows 7.37095.0: the scorer sits in a sibling chunk this patch cannot see;
++  # scripts/windows/check-quick-open-scorer.py asserts both preconditions on it
++  # before the patches run (build-windows.sh).
++  if wrapperCount(result) + topNCount(result) != 0:
++    echo "  [FAIL] files quick open worker: the scorer is back in the worker file - restore the in-patch precondition checks"
+     quit(1)
+ 
+   var count = 0
