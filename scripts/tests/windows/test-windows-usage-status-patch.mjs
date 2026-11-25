@@ -49,13 +49,13 @@ ok(syntax.status === 0, "patched file passes node --check" + (syntax.status ? ":
   writeFileSync(join(ud, "claude-desktop-extra.json"), '{"usageStatus":true}');
   const handlers = {}, created = [];
   const injected = { css: [], js: [] };
-  const wc = { getURL: () => "https://claude.ai/chat", isDestroyed: () => false, on: (e, f) => { handlers.dom = f; },
+  const wc = { getURL: () => "https://claude.ai/chat", isDestroyed: () => false, on: (e, f) => { if (e === "dom-ready") handlers.dom = f; },
     insertCSS: (c) => { injected.css.push(c); return Promise.resolve("k"); }, removeInsertedCSS: () => Promise.resolve(),
     executeJavaScript: (s) => { injected.js.push(s); return Promise.resolve(); } };
   const electron = { app: { getPath: () => ud, on: (e, f) => { handlers[e] = f; }, whenReady: () => Promise.resolve() },
     webContents: { getAllWebContents: () => created } };
   const sandbox = { require: (m) => (m === "electron" ? electron : Module.createRequire(import.meta.url)(m)),
-    process: { platform: "win32", env: {}, pid: 1 }, console: { log() {} }, setTimeout, clearTimeout };
+    process: { platform: "win32", env: {}, pid: 1 }, console: { log() {} }, setTimeout, clearTimeout, setInterval, clearInterval };
   sandbox.globalThis = sandbox;
   vm.runInContext(once, vm.createContext(sandbox));
   handlers["web-contents-created"]({}, wc);

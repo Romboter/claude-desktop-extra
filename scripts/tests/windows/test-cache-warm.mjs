@@ -12,7 +12,7 @@ const factory = vm.runInNewContext(readFileSync(join(ROOT, "js/cache_warm.js"), 
 const MIN = 60_000, HOUR = 3_600_000;
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-function harness(config = {}, send) {
+function harness(config = {}, send, extra = {}) {
   let clock = 1_000_000, nextHandle = 1, uuidCount = 0;
   const timers = new Map(), logs = [], sent = [];
   const cfg = { enabled: true, hours: 3, rewrites: 1, ttlEnv: undefined, ...config };
@@ -24,6 +24,7 @@ function harness(config = {}, send) {
     sendPoke: send || (async (id, uuid) => { sent.push({ id, uuid }); return { delivered: true }; }),
     newUuid: () => "poke-" + ++uuidCount,
     log: line => logs.push(line),
+    ...extra,
   });
   async function advance(ms) {
     const end = clock + ms;
@@ -201,6 +202,29 @@ test("two turnEnded calls leave exactly one live timer per session", () => {
 test("stopAll clears every timer", () => {
   const h = harness(); h.warm.turnEnded("s", usage()); h.warm.turnEnded("t", usage()); h.warm.stopAll();
   assert.equal(h.timers.size, 0);
+});
+
+test("a session switched off records its cache but arms nothing; switching on re-arms", () => {
+  const offSet = new Set(["s"]); let changes = 0;
+  const h = harness({}, undefined, { isOff: id => offSet.has(id), changed: () => changes++ });
+  h.warm.turnEnded("s", usage());
+  assert.equal(h.timers.size, 0);
+  assert.equal(h.warm.snapshot().s.armed, false); assert.equal(h.warm.snapshot().s.expiresAt, h.now() + HOUR);
+  offSet.delete("s"); h.warm.setOff("s", false);
+  assert.equal(h.timers.size, 1); assert.equal(dueIn(h), HOUR - 5 * MIN); assert.ok(changes >= 2);
+});
+test("switching a session off clears its timer; a due timer then does nothing", async () => {
+  const offSet = new Set();
+  const h = harness({}, undefined, { isOff: id => offSet.has(id) });
+  h.warm.turnEnded("s", usage()); offSet.add("s"); h.warm.setOff("s", true);
+  assert.equal(h.timers.size, 0);
+  await h.advance(HOUR); assert.equal(h.sent.length, 0);
+});
+test("snapshot counts pokes and keeps the skip reason after expiry", async () => {
+  const h = harness({ rewrites: 0, hours: 0.01 });
+  h.warm.turnEnded("s", usage());
+  await h.advance(HOUR - 5 * MIN);
+  const s = h.warm.snapshot().s; assert.equal(s.note, "time-cap"); assert.equal(s.pokes, 0);
 });
 
 let failed = 0;

@@ -13,6 +13,13 @@
 #usage-pace .up-meta { color: var(--cds-text-muted, color-mix(in srgb, currentColor 60%, transparent)); white-space: nowrap; font-variant-numeric: tabular-nums; }
 #usage-pace .up-track { position: relative; height: 4px; border-radius: 99px; background: color-mix(in srgb, currentColor 16%, transparent); }
 #usage-pace .up-fill { height: 100%; border-radius: inherit; background: var(--cds-fill-accent, #2a78d6); transition: width .2s ease-out; }
+#usage-pace .up-cw-toggle { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; pointer-events: auto; }
+#usage-pace .up-cw-toggle:disabled { cursor: default; opacity: .6; }
+#usage-pace .up-cw-dot { flex: none; width: 14px; height: 8px; border-radius: 99px; background: color-mix(in srgb, currentColor 25%, transparent); position: relative; }
+#usage-pace .up-cw-dot::after { content: ""; position: absolute; top: 1px; left: 1px; width: 6px; height: 6px; border-radius: 50%; background: var(--cds-bg-primary, #fff); transition: transform .15s; }
+#usage-pace .up-cw-on .up-cw-dot { background: var(--cds-fill-accent, #2a78d6); }
+#usage-pace .up-cw-on .up-cw-dot::after { transform: translateX(6px); }
+#usage-pace .up-fill.up-cw-off { background: color-mix(in srgb, currentColor 35%, transparent); }
 #usage-pace .up-fill.up-ctx-full { background: var(--cds-fill-warning, #e0913a); }
 
 /* Time line, in the sidebar and in Claude's usage popover */

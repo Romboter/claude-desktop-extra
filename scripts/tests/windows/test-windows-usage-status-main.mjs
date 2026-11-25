@@ -28,7 +28,7 @@ function boot(dir, platform = "win32") {
   };
   const sandbox = {
     require: (m) => (m === "electron" ? electron : Module.createRequire(import.meta.url)(m)),
-    process: { platform, env: {}, pid: process.pid }, console, setTimeout, clearTimeout,
+    process: { platform, env: {}, pid: process.pid }, console, setTimeout, clearTimeout, setInterval, clearInterval,
     __cdbDiag: (l) => diags.push(String(l))
   };
   sandbox.globalThis = sandbox;
@@ -37,10 +37,10 @@ function boot(dir, platform = "win32") {
 }
 
 function page(url, deferCss) {
-  const rec = { css: [], js: [], removed: [], pending: [] };
+  const rec = { css: [], js: [], removed: [], pending: [], on: {} };
   let n = 0, domReady;
   rec.wc = {
-    getURL: () => url, isDestroyed: () => false, on: (e, f) => { if (e === "dom-ready") domReady = f; },
+    getURL: () => url, isDestroyed: () => false, on: (e, f) => { if (e === "dom-ready") domReady = f; else (rec.on[e] ||= []).push(f); },
     insertCSS: (c) => { rec.css.push(c); const k = "k" + ++n;
       return deferCss ? new Promise((r) => rec.pending.push(() => r(k))) : Promise.resolve(k); },
     removeInsertedCSS: (k) => { rec.removed.push(k); return Promise.resolve(); },
@@ -68,7 +68,7 @@ console.log("\nB. Off by default; only claude.ai / claude.com pages");
   ok(t.diags.includes("[usage-status] installed (main); usageStatus=false"), "startup line logged");
   cfg(d, "claude-desktop-extra.json", { usageStatus: true });
   p = open(t, "https://claude.ai/chat"); await wait();
-  ok(p.css.length === 1 && p.js.length === 1 && p.js[0].startsWith('var __CDB_USAGE_STATUS_OPTS={"enabled":true};\n'), "on: CSS inserted and page script run with enabled:true");
+  ok(p.css.length === 1 && p.js.length === 1 && p.js[0].startsWith('var __CDB_USAGE_STATUS_OPTS={"enabled":true,"cw":{"master":false,"off":[],"sessions":{}}};\n'), "on: CSS inserted and page script run with enabled:true");
   ok(open(t, "https://claude.com/x").js.length === 1, "claude.com page is injected too");
   ok(open(t, "https://example.com/").js.length === 0, "other host skipped");
   ok(open(t, "app://localhost/chat").js.length === 0, "3P app://localhost page skipped");
@@ -86,10 +86,29 @@ console.log("\nC. .jsonc wins; switching off tears down");
   ok(p.js.length === 1, "back on without the .jsonc");
   cfg(d, "claude-desktop-extra.json", {});
   t.sandbox.__cdbUsageStatusRefresh(); await wait();
-  ok(p.js.length === 2 && p.js[1].startsWith('var __CDB_USAGE_STATUS_OPTS={"enabled":false};'), "refresh with the key off runs the teardown");
+  ok(p.js.length === 2 && p.js[1].startsWith('var __CDB_USAGE_STATUS_OPTS={"enabled":false,"cw":'), "refresh with the key off runs the teardown");
   ok(p.removed.length >= 1, "its CSS was removed");
   const q = open(t, "https://claude.ai/"); await wait();
   ok(q.js.length === 0, "a page that never carried the script gets no teardown run");
+}
+
+console.log("\nF. Cache warm row: switch store and state push");
+{
+  const d = dir(), t = boot(d);
+  cfg(d, "claude-desktop-extra.json", { usageStatus: true });
+  const p = open(t, "https://claude.ai/"); await wait();
+  t.sandbox.__cdbCacheWarm = { snapshot: () => ({ s1: { expiresAt: 5 } }), setOff: (id, off) => (t.off = [id, off]) };
+  const say = (message) => p.on["console-message"].forEach((f) => f({ message }));
+  ok(t.sandbox.__cdbCwIsOff("s1") === false, "a session is on by default");
+  t.sandbox.__cdbCwChanged(); await wait();
+  ok(p.js.length === 2 && p.js[1].includes("__cdbCwPush") && p.js[1].includes('"s1"'), "a change is pushed to the page");
+  say("__cdb-cw:s1:0"); await wait();
+  ok(t.sandbox.__cdbCwIsOff("s1") === true && t.off[0] === "s1" && t.off[1] === true, "the page's off message switches the session off");
+  ok(JSON.parse(readFileSync(join(d, "cache-warm-off.json"), "utf8")).includes("s1"), "the off list is saved");
+  say("__cdb-cw:s1:1"); await wait();
+  ok(t.sandbox.__cdbCwIsOff("s1") === false, "on again");
+  say("__cdb-cw:bad id:0"); await wait();
+  ok(t.sandbox.__cdbCwIsOff("bad id") === false, "a malformed id is ignored");
 }
 
 console.log("\nD. ON -> OFF while insertCSS is pending");

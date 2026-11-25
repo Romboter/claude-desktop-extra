@@ -163,6 +163,26 @@ run("sidebar-context-fallback", [true], "ok",
     getContextUsage: () => Promise.resolve({ percentage: 44 })
   } };
 </script>`);
+// Cache warm row: state pushed by the main process, a toggle that reports back.
+run("cache-warm-row", [true], "ok",
+  `var row = () => document.querySelector("#usage-pace .up-cw-row");
+   ok(row() !== null && row().querySelector(".up-meta").textContent === "off in Settings", "cache row: off in Settings while the master switch is off");
+   var said = []; var log = console.log; console.log = function (m) { said.push(m); };
+   window.__cdbCwPush({ master: true, off: [], sessions: { local_x: { expiresAt: Date.now() + 125000, ttl: "1h", pokes: 1, armed: true } } });
+   ok(/^[12]:[0-9][0-9] . 1 poke$/.test(row().querySelector(".up-meta").textContent), "cache row: countdown and pokes (" + row().querySelector(".up-meta").textContent + ")");
+   ok(row().querySelector(".up-cw-toggle").classList.contains("up-cw-on"), "cache row: switch on");
+   row().querySelector(".up-cw-toggle").click();
+   ok(said.join() === "__cdb-cw:local_x:0", "cache row: click reports off (" + said.join() + ")");
+   ok(/not warming/.test(row().querySelector(".up-meta").textContent) && !row().querySelector(".up-cw-toggle").classList.contains("up-cw-on"), "cache row: shows not warming");
+   window.__cdbCwPush({ master: true, off: [], sessions: { local_x: { expiresAt: Date.now() - 1000, ttl: "1h", pokes: 0, note: "time-cap" } } });
+   ok(row().querySelector(".up-meta").textContent === "stopped: time limit", "cache row: expired with the stop reason");
+   window.__cdbCwPush({ master: true, off: [], sessions: {} });
+   ok(row().querySelector(".up-meta").textContent === "no cache seen", "cache row: no cache seen");
+   console.log = log;`,
+  `<script>
+  document.querySelector("[data-row-key=a] [data-row-main-button]").setAttribute("aria-current", "page");
+  document.querySelector("[data-row-key=a]").setAttribute("data-row-key", "code:local_x");
+</script>`);
 run("popover-off", [true, false], "ok",
   `ok(${q(".up-context, .up-popover-pace, .up-time")} === 0, "popover: teardown removes context, pace and time lines");`, POPOVER);
 
