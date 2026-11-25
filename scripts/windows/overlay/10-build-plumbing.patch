@@ -42,7 +42,7 @@ index f79c42f..77680ab 100644
  clean:
  	@rm -rf $(BINS) .nimcache
 diff --git a/scripts/apply_patches.py b/scripts/apply_patches.py
-index 7e5801b..6a2056c 100644
+index 7e5801b..2749cc4 100644
 --- a/scripts/apply_patches.py
 +++ b/scripts/apply_patches.py
 @@ -11,7 +11,11 @@ target location.
@@ -58,7 +58,7 @@ index 7e5801b..6a2056c 100644
  
  <app_dir> is the directory that contains app.asar.contents/, i.e. the same
  path that build-patched-tarball.sh uses as "$WORK_DIR/app".
-@@ -35,6 +39,40 @@ PATCH_SUBDIRS = ("linux", "core", "community")
+@@ -35,6 +39,39 @@ PATCH_SUBDIRS = ("linux", "core", "community")
  # remove a patch.
  EXPECTED_PATCH_COUNT = 76
  
@@ -67,13 +67,12 @@ index 7e5801b..6a2056c 100644
 +# prefix injections then land ahead of the others). Pinned like
 +# EXPECTED_PATCH_COUNT.
 +WINDOWS_SUBDIR = "windows"
-+EXPECTED_WINDOWS_PATCH_COUNT = 5
++EXPECTED_WINDOWS_PATCH_COUNT = 7
 +# Shared patches the Windows build carries: every core and community feature
 +# except Linux window handling (window controls, native titlebar, window
 +# transparency), the Quick Entry socket and the Linux profile launcher's URL
 +# routing (patches/windows/ does that on Windows). Linux fixes stay out.
 +WINDOWS_PATCH_SET = (
-+    "add_feature_allow_non_anthropic_models",
 +    "add_feature_auto_archive_grace",
 +    "add_feature_auto_archive_grace_web",
 +    "add_feature_custom_models",
@@ -99,7 +98,7 @@ index 7e5801b..6a2056c 100644
  # Byte strings that only ever appear in a bundle one of our builds already
  # patched: every injected identifier starts with `__cdb`, and
  # `__nav_spoof_applied` is the marker of the navigator spoof removed for issue
-@@ -214,12 +252,58 @@ def run_nim_patch(nim_bin: Path, target_file: Path) -> bool:
+@@ -214,12 +251,58 @@ def run_nim_patch(nim_bin: Path, target_file: Path) -> bool:
          return False
  
  
@@ -162,7 +161,7 @@ index 7e5801b..6a2056c 100644
  
      if not patches_dir.is_dir():
          print(f"[ERROR] patches_dir not found: {patches_dir}", file=sys.stderr)
-@@ -268,6 +352,9 @@ def main():
+@@ -268,6 +351,9 @@ def main():
          )
          sys.exit(1)
  

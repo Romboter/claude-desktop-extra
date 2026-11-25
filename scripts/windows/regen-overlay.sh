@@ -11,7 +11,7 @@ group() {
         scripts/apply_patches.py|patches/Makefile|scripts/run-feature-tests.sh) echo 10-build-plumbing ;;
         js/extra_settings_*|js/theme_picker_page.html|patches/community/add_feature_theme_picker.nim|patches/core/add_feature_custom_themes.nim|patches/core/add_feature_extra_settings.nim|scripts/tests/core/test-extra-settings-dom.mjs) echo 20-extra-settings ;;
         js/auto_archive_grace_*|patches/community/add_feature_auto_archive_grace*.nim|scripts/tests/community/test-auto-archive-grace.mjs) echo 30-auto-archive ;;
-        js/files_quick_open_*|patches/community/add_feature_files_quick_open_worker.nim|scripts/tests/community/test-files-quick-open-worker.mjs) echo 40-files-quick-open ;;
+        js/files_quick_open_*|patches/community/add_feature_files_quick_open.nim|patches/community/add_feature_files_quick_open_worker.nim|scripts/tests/community/test-files-quick-open-worker.mjs) echo 40-files-quick-open ;;
         js/jira_tracker_*|scripts/tests/community/test-jira-*.mjs) echo 50-jira-tracker ;;
         js/diff_views_main.js) echo 60-diff-views ;;
         js/allow_non_anthropic_models.js|patches/community/add_feature_custom_models.nim) echo 70-custom-models ;;

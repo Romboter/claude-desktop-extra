@@ -219,6 +219,8 @@ python3 "$SRC/scripts/check-upstream-absorbed.py" --patches "$PROBE" "$WORK/app/
 rm -rf "$PROBE"
 
 log "Applying the Windows patch set"
+python3 -I "$SRC/scripts/windows/check-quick-open-scorer.py" "$WORK/app/app.asar.contents" ||
+    die "the file-index scorer contract moved (see scripts/windows/check-quick-open-scorer.py)"
 python3 "$SRC/scripts/apply_patches.py" --windows "$SRC/patches" "$WORK/app"
 
 for p in "${WINDOWS_ION_PATCHES[@]}"; do
