@@ -2,6 +2,20 @@
 
 All notable changes to the claude-desktop-extra packages will be documented in this file.
 
+## 2026-11-25
+
+### Jira tracker: Code-tab sidebar scoping & "Edit sidebar" / "More" integration
+
+- Scoped the injected **Jira** sidebar row in [`js/jira_tracker_web_page.js`](js/jira_tracker_web_page.js) to the **Code** tab only (detected via the sidebar's `frameMode` React fiber prop, `aside[data-code-list]`, or `/epitaxy` / `/code` routes), so it no longer appears on the Chat or Cowork tabs; **Ctrl+Shift+J** continues to open Jira from any tab.
+- Integrated **Jira** into upstream's **Edit sidebar** dialog on the Code tab (checkbox state persisted per profile as `sidebarPinned` in `cdb-jira-state.json` via `cdb-jira:sidebar-read` / `cdb-jira:sidebar-set` in [`js/jira_tracker_main.js`](js/jira_tracker_main.js) and [`js/extra_settings_bridge.js`](js/extra_settings_bridge.js)). Unchecking **Jira** hides it from the main sidebar and adds it to the **More** flyout menu instead.
+- Added fallback sidebar row anchors (`Customize`, `On-call`, `Meetings`, before `More`, `Search`, `New`) so unchecking both `Scheduled` and `Artifacts` in **Edit sidebar** keeps the **Jira** row visible.
+
+### Artifact Apps ("Install as app" Beta) on Linux
+
+- Enabled upstream's **Install as app** (`artifactApps`) feature for artifacts on Linux across all three permission tiers (**Default**, **App Permissions**, and **Full Computer Access**: GrowthBook flags `2701212339`, `3983690295`, `3574866070`) via [`fix_artifact_apps_linux.nim`](patches/linux/fix_artifact_apps_linux.nim) and [`fix_artifact_apps_pre_linux.nim`](patches/linux/fix_artifact_apps_pre_linux.nim).
+- Added the missing [`artifactAppWindow.js`](js/artifact_app_window_preload.js) preload and Linux runtime ([`js/artifact_apps_linux.js`](js/artifact_apps_linux.js)): installs XDG `.desktop` entries under `~/.local/share/applications/` and hicolor PNG icons (`256×256` / `512×512`), isolates entries and `--profile=` arguments per profile (`CLAUDE_PROFILE`), swaps `CHROME_DESKTOP` / `app.setDesktopName` strictly around standalone window construction so compositors and panels group installed apps cleanly while preserving `com.anthropic.Claude` portal identity, routes `--artifact-app=<id>` cold-start and second-instance launches, and maps uninstall, "Show in File Manager", icon updates, badge counts and tray keep-alive to Linux.
+- Updated `scripts/check-refusal-strings.py` and `baseline/refusal-strings.json` to catch `"on macOS/Windows only"` wording, and corrected the `2701212339` / `3983690295` / `3574866070` descriptions in `docs/claude-desktop-extra.jsonc` / `js/growthbook_overrides.js`.
+
 ## 2026-11-23
 
 ### Custom Shortcuts: Send queued message now (`send-now`)

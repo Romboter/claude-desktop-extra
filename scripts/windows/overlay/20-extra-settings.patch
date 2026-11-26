@@ -1,5 +1,5 @@
 diff --git a/js/extra_settings_bridge.js b/js/extra_settings_bridge.js
-index 3081a1b..d79b5c5 100644
+index 23a274b..d71d9fd 100644
 --- a/js/extra_settings_bridge.js
 +++ b/js/extra_settings_bridge.js
 @@ -63,6 +63,18 @@

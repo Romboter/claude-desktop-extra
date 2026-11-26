@@ -11,7 +11,7 @@ index 1647048..32678d7 100644
    var SITE_RE = /^https:\/\/[a-z0-9][a-z0-9-]*\.atlassian\.net\/?$/;
    var CLOUD_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 diff --git a/js/jira_tracker_main.js b/js/jira_tracker_main.js
-index 7bf049b..45e6ae5 100644
+index 2c96b2e..e154151 100644
 --- a/js/jira_tracker_main.js
 +++ b/js/jira_tracker_main.js
 @@ -1,6 +1,6 @@
@@ -47,7 +47,7 @@ index 29cb199..5453aa5 100644
    var NAVIGATE_TO_SESSION = true;
    var START_ATTENDED = true;
 diff --git a/js/jira_tracker_store.js b/js/jira_tracker_store.js
-index d15c231..e600d25 100644
+index ab8797c..d6f3db3 100644
 --- a/js/jira_tracker_store.js
 +++ b/js/jira_tracker_store.js
 @@ -1,6 +1,6 @@
@@ -74,7 +74,7 @@ index d15c231..e600d25 100644
        });
        return out;
      }
-@@ -226,7 +228,7 @@
+@@ -231,7 +233,7 @@
        }
        if (patch.folder !== undefined) {
          var f = patch.folder;
@@ -113,10 +113,10 @@ index e926faf..ca0926e 100644
    assert.equal(withSort("assignee = currentUser()", "updated"), "assignee = currentUser() ORDER BY updated DESC");
    assert.equal(withSort("assignee = currentUser()", "priority"), "assignee = currentUser() ORDER BY priority DESC, updated DESC");
 diff --git a/scripts/tests/community/test-jira-ipc.mjs b/scripts/tests/community/test-jira-ipc.mjs
-index 36ea74d..47dc0a1 100644
+index dfa49bd..af35240 100644
 --- a/scripts/tests/community/test-jira-ipc.mjs
 +++ b/scripts/tests/community/test-jira-ipc.mjs
-@@ -226,8 +226,18 @@ try {
+@@ -233,8 +233,18 @@ try {
      assert.equal(store.state().template, "");
      assert.equal(fs.statSync(path.join(dir, "cdb-jira-state.json")).mode & 0o777, 0o600);
    });
@@ -137,7 +137,7 @@ index 36ea74d..47dc0a1 100644
    });
    await test("bridge: fixed jira channels, shaped arguments; preload: fixed methods", () => {
      const calls = []; let exposed = null;
-@@ -557,9 +567,11 @@ try {
+@@ -752,9 +762,11 @@ try {
    const RECT = { x: 260, y: 0, width: 940, height: 800 };
    const on = (w) => w.call("cdb-jira-pref:set", w.claude, { enabled: true });
  
