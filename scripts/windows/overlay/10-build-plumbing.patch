@@ -1,5 +1,5 @@
 diff --git a/patches/Makefile b/patches/Makefile
-index f79c42f..77680ab 100644
+index 4dca16d..f6ccc9c 100644
 --- a/patches/Makefile
 +++ b/patches/Makefile
 @@ -1,9 +1,10 @@
@@ -23,7 +23,7 @@ index f79c42f..77680ab 100644
  BINS := $(SRCS:.nim=)
  
  ifeq ($(strip $(SRCS)),)
-@@ -209,5 +210,17 @@ community/add_feature_jira_tracker: \
+@@ -211,5 +212,17 @@ community/add_feature_jira_tracker: \
    ../js/jira_tracker_web_page.js
  
  
@@ -42,7 +42,7 @@ index f79c42f..77680ab 100644
  clean:
  	@rm -rf $(BINS) .nimcache
 diff --git a/scripts/apply_patches.py b/scripts/apply_patches.py
-index 7e5801b..2749cc4 100644
+index 0d5ae06..51bd3c6 100644
 --- a/scripts/apply_patches.py
 +++ b/scripts/apply_patches.py
 @@ -11,7 +11,11 @@ target location.
@@ -60,7 +60,7 @@ index 7e5801b..2749cc4 100644
  path that build-patched-tarball.sh uses as "$WORK_DIR/app".
 @@ -35,6 +39,39 @@ PATCH_SUBDIRS = ("linux", "core", "community")
  # remove a patch.
- EXPECTED_PATCH_COUNT = 76
+ EXPECTED_PATCH_COUNT = 78
  
 +# The Windows build (--windows). patches/windows/ holds the Windows-only
 +# patches; they are applied AFTER the shared ones (on a shared target, their
@@ -172,7 +172,7 @@ index 7e5801b..2749cc4 100644
      nim_jobs_by_target = {}  # real_target -> list[(patch_file, nim_binary)]
  
 diff --git a/scripts/run-feature-tests.sh b/scripts/run-feature-tests.sh
-index 5caea23..35f82ce 100644
+index 55e3bf7..75ff182 100644
 --- a/scripts/run-feature-tests.sh
 +++ b/scripts/run-feature-tests.sh
 @@ -1,5 +1,5 @@
@@ -190,7 +190,7 @@ index 5caea23..35f82ce 100644
  
  set -uo pipefail
  
-@@ -34,17 +35,25 @@ EXPECTED_TEST_HARNESSES=103
+@@ -34,17 +35,25 @@ EXPECTED_TEST_HARNESSES=104
  CATEGORIES=(community core linux)
  
  usage() {
