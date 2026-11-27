@@ -27,7 +27,7 @@ The app ships zipped inside the download because its deepest files are about 100
 
 To update, install the next zip the same way; data and sign-in are kept. The app does not update itself, but it tells you when there is a newer build: about a minute after start, then every 12 hours, it reads this repository's release list on GitHub, and when a `windows-v<version>` release is newer than the installed version it shows one dialog whose **Open download page** opens that release. It asks once per version (remembered in `claude-desktop-extra-update.json` in the profile's data folder), never downloads anything, and logs its checks to `claude-patches.log` (`[win-update]`). `CDB_UPDATE_NOTICE=0` in the environment turns it off. `Install.cmd -Uninstall` removes the app and its shortcuts and keeps the data.
 
-**With the official app installed too:** the default profile uses the same data folder (`%APPDATA%\Claude`), so you stay signed in, but only one of the two runs at a time - quit the official app first. Sign-in links (`claude://`) may open either app; quit the one you are not signing in to.
+**With the official app installed too:** the default profile uses the same data folder (newer official builds: `%LOCALAPPDATA%\Claude-Data\claude_*`, which the app and `Install.cmd` find on their own; older ones: `%APPDATA%\Claude`), so you stay signed in, but only one of the two runs at a time - quit the official app first. Sign-in links (`claude://`) may open either app; quit the one you are not signing in to.
 
 ## Code signing
 
@@ -51,7 +51,7 @@ A shortcut runs `claude.exe --profile=work`; `CLAUDE_PROFILE=work` in the enviro
 
 | | Default profile | Profile `work` |
 |---|---|---|
-| App data (sign-in, settings, logs, `claude-desktop-extra.json`) | `%APPDATA%\Claude` | `%APPDATA%\Claude-work` |
+| App data (sign-in, settings, logs, `claude-desktop-extra.json`) | `%LOCALAPPDATA%\Claude-Data\claude_*` if it exists, else `%APPDATA%\Claude` | `%APPDATA%\Claude-work` |
 | Claude Code configuration | `%USERPROFILE%\.claude` | `%USERPROFILE%\.claude-work` |
 | Window title | `Claude` | `Claude (work)` |
 

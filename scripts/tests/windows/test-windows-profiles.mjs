@@ -71,6 +71,27 @@ function clearMarkers() { rmSync(MARKERS, { recursive: true, force: true }); }
   ok(!("CLAUDE_USER_DATA_DIR" in r2.env) && r2.calls.setPath.length === 0, "--profile=default is the default profile");
 }
 
+// --- newer official builds keep their data in Claude-Data\claude_* ----------
+{
+  const cd = join(LOCAL, "Claude-Data");
+  const old = join(cd, "claude_old"), cur = join(cd, "claude_cur");
+  mkdirSync(old, { recursive: true });
+  mkdirSync(cur, { recursive: true });
+  mkdirSync(join(cd, "Claude"), { recursive: true });   // not a claude_* folder: ignored
+  const t = Date.now() / 1000;
+  utimesSync(old, t - 100, t - 100);
+  utimesSync(cur, t, t);
+  const r = run([]);
+  ok(r.env.CLAUDE_USER_DATA_DIR === cur && r.paths.userData === cur,
+     "default profile uses the newest Claude-Data\\claude_* folder");
+  const r2 = run([], { CLAUDE_USER_DATA_DIR: "X:\\mine" });
+  ok(r2.env.CLAUDE_USER_DATA_DIR === "X:\\mine" && r2.calls.setPath.length === 0,
+     "an explicit CLAUDE_USER_DATA_DIR wins");
+  const r3 = run(["--profile=work"]);
+  ok(r3.env.CLAUDE_USER_DATA_DIR === join(APPDATA, "Claude-work"), "a named profile ignores Claude-Data");
+  rmSync(cd, { recursive: true, force: true });
+}
+
 // --- a named profile ---------------------------------------------------------
 for (const [label, argv, env] of [
   ["--profile=work", ["--profile=work"], {}],

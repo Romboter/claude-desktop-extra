@@ -39,7 +39,8 @@ Smart App Control (Windows Security > App & browser control) blocks unsigned
 apps: while it is on, this build will not start.
 
 If the official Claude app is installed too, quit it before starting this one:
-the default profile shares its data folder (%APPDATA%\Claude), so you stay
+the default profile shares its data folder (%LOCALAPPDATA%\Claude-Data\claude_*
+for newer official builds, else %APPDATA%\Claude), so you stay
 signed in, but only one of the two can run at a time.
 
 
