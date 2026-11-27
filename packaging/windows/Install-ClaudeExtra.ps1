@@ -102,6 +102,86 @@ function Stop-IfOfficialRunning {
   }
 }
 
+# What the old data folder has and the new one lacks: session entries
+# (local_*.json only, skipping any the user deleted; the archived index files stay per folder) and a
+# few small settings files. Never overwrites. The Chromium stores (Local
+# Storage, IndexedDB, Network, Preferences) are not merged: mixing them corrupts
+# them. claude_desktop_config.json and config.json are left alone: merge by hand.
+function Get-OldDataToCopy([string]$Old, [string]$New) {
+  $sessions = Join-Path $Old 'claude-code-sessions'
+  foreach ($acct in Get-ChildItem $sessions -Directory -ErrorAction SilentlyContinue) {
+    foreach ($org in Get-ChildItem $acct.FullName -Directory) {
+      $dst = Join-Path $New "claude-code-sessions\$($acct.Name)\$($org.Name)"
+      foreach ($f in Get-ChildItem $org.FullName -File -Filter 'local_*.json') {
+        # A deleted_<id> marker in either folder means the user removed that session.
+        $id = $f.BaseName -replace '^local_', ''
+        if ((Test-Path (Join-Path $org.FullName "deleted_$id")) -or (Test-Path (Join-Path $dst "deleted_$id"))) { continue }
+        if (-not (Test-Path (Join-Path $dst $f.Name))) { [pscustomobject]@{ Src = $f.FullName; Dir = $dst } }
+      }
+    }
+  }
+  foreach ($name in 'claude-desktop-extra.json', 'claude-desktop-extra.jsonc', 'cache-warm-off.json', 'claude-desktop-extra-update.json') {
+    $src = Join-Path $Old $name
+    if ((Test-Path $src) -and -not (Test-Path (Join-Path $New $name))) { [pscustomobject]@{ Src = $src; Dir = $New } }
+  }
+}
+
+# Both an older (%APPDATA%\Claude) and a newer (%LOCALAPPDATA%\Claude-Data\claude_*)
+# data folder exist: offer to merge the old one into the new one, with a backup of
+# both first (regenerable caches left out) that the user may delete afterwards.
+function Offer-DataMerge([string]$Old, [string]$New) {
+  # Ask only when there is something to copy, the user has not answered before
+  # (the marker records a merge or an explicit no) and someone can answer.
+  $asked = Join-Path $New 'claude-desktop-extra-merge-asked.txt'
+  $todo = @(Get-OldDataToCopy $Old $New)
+  if ($todo.Count -eq 0 -or (Test-Path $asked)) { return }
+  $interactive = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
+  if (-not $interactive) { Write-Host "An older Claude data folder exists ($Old); run Install.cmd from a console to merge it."; return }
+  Write-Host ''
+  Write-Host 'Two Claude data folders were found:'
+  Write-Host "  in use: $New"
+  Write-Host "  older:  $Old"
+  Write-Host "The app uses only the first. $($todo.Count) older session and settings files are not in it."
+  $answer = (Read-Host 'Merge the older folder into the one in use? A backup is made first. [y = merge, n = never, Enter = ask next time]').Trim()
+  if ($answer -match '^(n|no)$') {
+    Set-Content $asked 'Declined merging the older Claude data folder; delete this file to be asked again.'
+    Write-Host 'Left both folders as they are. You will not be asked again.'
+    return
+  }
+  if ($answer -notmatch '^(y|yes)$') { Write-Host 'Left both folders as they are. You will be asked again next time.'; return }
+
+  # Same rule as the install: the default profile's folder must not be in use.
+  try { Stop-IfRunning; Stop-IfOfficialRunning }
+  catch { Write-Host "Skipped the merge: $($_.Exception.Message)"; return }
+
+  $backup = Join-Path $env:USERPROFILE ('claude-data-backup-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+  if (Test-Path $backup) { Write-Host "Skipped the merge: $backup already exists. Run again."; return }
+  $cache = 'Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'GrShaderCache', 'ShaderCache', 'GPUPersistentCache', 'Crashpad'
+  Write-Host "Backing up both folders to $backup ..."
+  foreach ($pair in @(@($Old, 'old'), @($New, 'new'))) {
+    robocopy $pair[0] (Join-Path $backup $pair[1]) /E /R:0 /W:0 /NJH /NJS /NFL /NDL /NP /XD $cache | Out-Null
+    if ($LASTEXITCODE -ge 8) { Write-Host "Backup failed (robocopy exit $LASTEXITCODE); nothing was merged."; return }
+  }
+  $copied = 0
+  try {
+    foreach ($item in $todo) {
+      New-Item -ItemType Directory -Force -Path $item.Dir | Out-Null
+      Copy-Item $item.Src $item.Dir
+      $copied++
+    }
+  } catch {
+    Write-Host "The merge stopped after $copied of $($todo.Count) files: $($_.Exception.Message)"
+    Write-Host "Your data before the merge is in the backup: $backup"
+    return
+  }
+  Set-Content $asked 'Merged the older Claude data folder; delete this file to be offered again.'
+  Write-Host "Merged $copied files."
+  Write-Host 'Now start Claude (Extra) from the Start Menu and check that your sessions are there.'
+  $del = Read-Host "Delete the backup ($backup)? [y/N]"
+  if ($del -match '^(y|yes)$') { Remove-Item -Recurse -Force $backup; Write-Host 'Backup deleted.' }
+  else { Write-Host "Backup kept: $backup" }
+}
+
 if ($Uninstall) {
   Stop-IfRunning
   if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
@@ -182,8 +262,8 @@ $data = Get-DefaultDataDir
 Write-Host ''
 Write-Host "Default profile data (shared with the official Claude app): $data"
 $classic = Join-Path $env:APPDATA 'Claude'
-if ($data -ne $classic -and (Test-Path (Join-Path $classic 'claude_desktop_config.json'))) {
-  Write-Host "  Note: $classic also exists (an older install). The app does not use it while the folder above exists."
+if ($data -ne $classic -and (Test-Path $classic)) {
+  Offer-DataMerge $classic $data
 }
 Write-Host 'Done. Start Claude from the Start Menu.'
 Write-Host 'Custom models: Settings > Extra > Models. More: README-Windows.txt'
