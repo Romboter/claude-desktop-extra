@@ -70,11 +70,35 @@ function Add-Shortcuts([string]$ProfileName) {
   Write-Host "  Shortcut: Start Menu > $AppName > $($name -replace '\.lnk$','')"
 }
 
+# The data folder the default profile shares with the official app: the newer
+# official builds use %LOCALAPPDATA%\Claude-Data\claude_*, older ones
+# %APPDATA%\Claude. Mirrors the app's own lookup (windows_profiles_main.js).
+function Get-DefaultDataDir {
+  $root = Join-Path $env:LOCALAPPDATA 'Claude-Data'
+  $modern = Get-ChildItem $root -Directory -Filter 'claude_*' -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if ($modern) { return $modern.FullName }
+  return (Join-Path $env:APPDATA 'Claude')
+}
+
 function Stop-IfRunning {
   $running = Get-Process -Name claude -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -and $_.Path -ieq $Exe }
   if ($running) {
     throw "Claude Desktop Extra is running from $InstallDir. Quit it (tray icon > Quit) and run this again."
+  }
+}
+
+# The default profile shares its data folder with the official app, so only
+# one can run. Claude Code's CLI is also claude.exe, so match only where the
+# desktop app lives: an AnthropicClaude folder (classic) or WindowsApps\Claude_*
+# / Anthropic.Claude* (MSIX).
+function Stop-IfOfficialRunning {
+  $running = Get-Process -Name claude -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path -ine $Exe -and
+      ($_.Path -match '\\AnthropicClaude\\' -or $_.Path -match '\\WindowsApps\\(Claude_|Anthropic\.Claude)') }
+  if ($running) {
+    throw 'The official Claude app is running. Quit it (tray icon > Quit) and run this again.'
   }
 }
 
@@ -111,6 +135,7 @@ $SourceDir = Join-Path $PSScriptRoot 'app'
 $HasZip = Test-Path $SourceZip
 if ($HasZip -or (Test-Path (Join-Path $SourceDir 'claude.exe'))) {
   Stop-IfRunning
+  Stop-IfOfficialRunning
   Write-Host "Installing $AppName to $InstallDir"
   # A zip downloaded from the internet marks every file; clear the mark so
   # Windows does not ask about each DLL.
@@ -153,6 +178,12 @@ if ($HasZip -or (Test-Path (Join-Path $SourceDir 'claude.exe'))) {
 
 if ($ProfileName) { Add-Shortcuts $ProfileName }
 
+$data = Get-DefaultDataDir
 Write-Host ''
+Write-Host "Default profile data (shared with the official Claude app): $data"
+$classic = Join-Path $env:APPDATA 'Claude'
+if ($data -ne $classic -and (Test-Path (Join-Path $classic 'claude_desktop_config.json'))) {
+  Write-Host "  Note: $classic also exists (an older install). The app does not use it while the folder above exists."
+}
 Write-Host 'Done. Start Claude from the Start Menu.'
 Write-Host 'Custom models: Settings > Extra > Models. More: README-Windows.txt'

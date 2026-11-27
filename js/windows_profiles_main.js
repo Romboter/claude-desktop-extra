@@ -13,7 +13,9 @@
  *
  *   1. PROFILE. --profile=NAME (or --profile NAME, or CLAUDE_PROFILE=NAME in
  *      the environment) selects a named profile. "default" or nothing is the
- *      default profile, which is left exactly as the official app runs it.
+ *      default profile, which shares the official app's data folder:
+ *      %LOCALAPPDATA%\Claude-Data\claude_* when it exists (newer official
+ *      builds), else upstream's %APPDATA%\Claude.
  *      A named profile sets:
  *        CLAUDE_USER_DATA_DIR = %APPDATA%\Claude-NAME  (read by upstream itself:
  *                               it moves userData and logs there, and skips
@@ -111,6 +113,36 @@
     log("profile '" + name + "' (" + why + "): userData " + dir + ", Claude Code config " + process.env.CLAUDE_CONFIG_DIR);
   }
 
+  // The newer official Claude keeps its data in %LOCALAPPDATA%\Claude-Data\
+  // claude_<package hash> (older ones in %APPDATA%\Claude). Upstream only
+  // switches there with an MSIX package identity, which this build lacks, so
+  // the default profile finds the folder itself: the newest claude_* one.
+  function modernDataDir() {
+    var base = process.env.LOCALAPPDATA;
+    if (!base) return null;
+    var root = _path.join(base, "Claude-Data");
+    var best = null;
+    try {
+      _fs.readdirSync(root).forEach(function (n) {
+        if (!/^claude_/i.test(n)) return;
+        var p = _path.join(root, n);
+        var t;
+        try { var st = _fs.statSync(p); if (!st.isDirectory()) return; t = st.mtimeMs; } catch (e) { return; }
+        if (!best || t > best.t) best = { p: p, t: t };
+      });
+    } catch (e) { return null; }
+    return best && best.p;
+  }
+
+  function applyDefaultDataDir() {
+    if (process.env.CLAUDE_USER_DATA_DIR) return;
+    var dir = modernDataDir();
+    if (!dir) return;
+    process.env.CLAUDE_USER_DATA_DIR = dir;
+    try { _app.setPath("userData", dir); } catch (e) {}
+    log("default profile: userData " + dir + " (shared with the official app)");
+  }
+
   // --- 2. route a sign-in callback to the profile that asked for it ----------
   // The newest fresh marker, consumed. null when there is none.
   function takeNewestMarker() {
@@ -164,6 +196,7 @@
       log("sign-in callback for the default profile");
     }
   }
+  if (!name) applyDefaultDataDir();
   flush();
 
   // Mark auth URLs this profile opens in the browser. "default" for the
