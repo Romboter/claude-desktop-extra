@@ -33,7 +33,7 @@ Settings -> Extra -> Community -> **Usage and session status**. Off by default; 
 
 - **State on each session** in the sidebar: a turning gear while Claude works, a still gear with **Waiting** (needs your answer), **Ready** (an unread response) or **Error**; idle sessions show nothing. Side sessions get the same.
 - **Usage popover** (the ring below the message box): pace lines above every limit, and the session's context in Claude's own bar colored by what fills it, with **Compact session** once Claude offers it (from 50%), or **Show session rail** while the rail is hidden.
-- **Session colors**: right-click a session (or its "..." button) and pick a color in Claude's menu; it shows as a stripe and tint on the row, saved per session.
+- **Session colors**: right-click a session (or its "..." button) and pick a color in Claude's menu (five colors taken from the active theme's palette, so they change with the theme); it shows as a stripe and tint on the row, saved per session.
 
 English and German, light and dark follow Claude.
 

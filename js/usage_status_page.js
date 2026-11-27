@@ -923,11 +923,16 @@
 
   // Right-click a session (or its "..." button) and pick a color in Claude's
   // own menu; it shows as a stripe and tint on the row. Saved per session title.
-  const COLORS = { red: '#e5484d', orange: '#e0913a', yellow: '#d4b73a', teal: '#2bb5a0', purple: '#8e4ec6', pink: '#d6409f' };
+  const COLORS = ['pink', 'purple', 'red', 'orange', 'teal']; // theme-card order; the hues come from the theme (usage_status.css)
   let sessionColors = {};
   try {
     sessionColors = JSON.parse(stored('colors') || '{}');
   } catch {}
+  // The old yellow slot is gone: show it as orange, and drop any other unknown name.
+  for (const [id, color] of Object.entries(sessionColors)) {
+    if (color === 'yellow') sessionColors[id] = 'orange';
+    else if (!COLORS.includes(color)) delete sessionColors[id];
+  }
   let menuFor = null;
 
   // The session id, read from the row's React fiber (this script runs in the
@@ -949,7 +954,7 @@
     if (!scope) return;
     for (const row of scope.querySelectorAll('[data-row]')) {
       const color = sessionColors[sessionId(row)] ?? sessionColors[rowTitle(row)];
-      setAttribute(row, 'data-up-color', COLORS[color] ? color : null);
+      setAttribute(row, 'data-up-color', COLORS.includes(color) ? color : null);
     }
   }
 
@@ -985,12 +990,12 @@
       setSessionColor(id, color);
       for (const target of [document.activeElement, menu]) target?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     };
-    for (const [name, value] of [['', null], ...Object.entries(COLORS)]) {
+    for (const name of ['', ...COLORS]) {
       const swatch = element('button', 'up-swatch' + (name === (current ?? '') ? ' up-swatch-on' : ''));
       swatch.type = 'button';
-      swatch.title = name || strings().noColor;
-      swatch.setAttribute('aria-label', swatch.title);
-      if (value) swatch.style.background = value;
+      // No tooltip: the dot shows the color. The name is its position, in the same order as the theme cards.
+      swatch.setAttribute('aria-label', name ? `${strings().color} ${COLORS.indexOf(name) + 1}` : strings().noColor);
+      if (name) swatch.setAttribute('data-up-color', name);
       else swatch.classList.add('up-swatch-none');
       swatch.addEventListener('click', (event) => {
         event.stopPropagation();
