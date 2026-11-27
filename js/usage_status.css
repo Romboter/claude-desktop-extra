@@ -99,12 +99,13 @@ div[data-row]:is(:hover, [data-menu-open], :has(:focus-visible)) [data-up-badge]
 
 
 /* Session colors */
-[data-row][data-up-color="red"] { --up-c: #e5484d; }
-[data-row][data-up-color="orange"] { --up-c: #e0913a; }
-[data-row][data-up-color="yellow"] { --up-c: #d4b73a; }
-[data-row][data-up-color="teal"] { --up-c: #2bb5a0; }
-[data-row][data-up-color="purple"] { --up-c: #8e4ec6; }
-[data-row][data-up-color="pink"] { --up-c: #d6409f; }
+/* Palette tokens (HSL triples) that Claude and the active theme define per light/dark mode */
+:is([data-row], .up-swatch)[data-up-color="red"] { --up-c: hsl(var(--danger-100, 358 75% 59%)); }
+:is([data-row], .up-swatch)[data-up-color="orange"] { --up-c: hsl(var(--warning-100, 30 72% 55%)); }
+:is([data-row], .up-swatch)[data-up-color="teal"] { --up-c: hsl(var(--success-100, 170 62% 44%)); }
+:is([data-row], .up-swatch)[data-up-color="purple"] { --up-c: hsl(var(--accent-pro-100, 270 50% 55%)); }
+:is([data-row], .up-swatch)[data-up-color="pink"] { --up-c: hsl(var(--accent-brand, 320 65% 53%)); }
+.up-swatch[data-up-color] { background: var(--up-c); }
 [data-row][data-up-color] { background: color-mix(in srgb, var(--up-c) 14%, transparent); box-shadow: inset 3px 0 0 var(--up-c); }
 .up-swatches { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; }
 .up-swatches-label { margin-right: auto; color: var(--cds-text-muted, currentColor); }
